@@ -45,7 +45,7 @@ export function BillingTab() {
     wsSend({ cmd: 'get_refill_history', page: 1, perPage: 25, ...targetSipParam });
     // Admin: fetch user list for filter dropdown (V1 line 5154)
     if (role === 'admin') {
-      wsSend({ cmd: 'get_users_overview' });
+      wsSend({ cmd: 'get_users_overview', includeAll: true });
     }
   }, [selectedSip, role]);
 
@@ -249,7 +249,7 @@ function ManualCreditSection({ userList }: { userList: { id: number; username: s
     if (creditMsg) {
       wsSend({ cmd: 'get_balance' });
       wsSend({ cmd: 'get_refill_history', page: 1, perPage: 25 });
-      wsSend({ cmd: 'get_users_overview' });
+      wsSend({ cmd: 'get_users_overview', includeAll: true });
     }
   }, [creditMsg]);
 
