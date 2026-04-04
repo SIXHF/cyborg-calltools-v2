@@ -159,13 +159,14 @@ interface SipExtension {
 }
 
 function SipAccountInfo() {
+  const selectedSipForInfo = useAuthStore(s => s.selectedSipUser);
   const sipInfoMsg = useWsMessage<{ type: string; extensions: SipExtension[] }>('sip_info');
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    wsSend({ cmd: 'get_sip_info' });
-  }, []);
+    wsSend({ cmd: 'get_sip_info', targetSip: selectedSipForInfo || undefined });
+  }, [selectedSipForInfo]);
 
   useEffect(() => {
     if (sipInfoMsg) setLoaded(true);

@@ -61,11 +61,12 @@ function SipUsagePanel() {
   const [totals, setTotals] = useState<SipUsageTotals | null>(null);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const selectedSip = useAuthStore(s => s.selectedSipUser);
   const usageMsg = useWsMessage<any>('sip_usage_result');
 
   useEffect(() => {
-    wsSend({ cmd: 'get_sip_usage' });
-  }, []);
+    wsSend({ cmd: 'get_sip_usage', targetSip: selectedSip || undefined });
+  }, [selectedSip]);
 
   useEffect(() => {
     if (usageMsg) {
@@ -77,6 +78,7 @@ function SipUsagePanel() {
   const fetchUsage = () => {
     wsSend({
       cmd: 'get_sip_usage',
+      targetSip: selectedSip || undefined,
       ...(dateFrom ? { dateFrom } : {}),
       ...(dateTo ? { dateTo } : {}),
     });
@@ -94,7 +96,7 @@ function SipUsagePanel() {
         <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="form-input !py-1.5 !px-2.5 !text-xs" />
         <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="form-input !py-1.5 !px-2.5 !text-xs" />
         <button onClick={fetchUsage} className="btn btn-sm btn-primary">Search</button>
-        <button onClick={() => { setDateFrom(''); setDateTo(''); wsSend({ cmd: 'get_sip_usage' }); }} className="btn btn-sm">Clear</button>
+        <button onClick={() => { setDateFrom(''); setDateTo(''); wsSend({ cmd: 'get_sip_usage', targetSip: selectedSip || undefined }); }} className="btn btn-sm">Clear</button>
       </div>
 
       {/* Summary Cards */}
