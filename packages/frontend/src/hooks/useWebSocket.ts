@@ -66,8 +66,37 @@ function handleMessage(event: MessageEvent) {
       channels.setChannels(msg.channels as any);
       break;
 
+    case 'cnam_update': {
+      // Merge CNAM/fraud data into channels (V1 parity)
+      const cnamMap = (msg as any).cnam_map || {};
+      const currentChannels = channels.channels;
+      if (currentChannels.length > 0 && Object.keys(cnamMap).length > 0) {
+        const normalize = (n: string) => {
+          const clean = n.replace(/\D/g, '');
+          return clean.length === 10 ? '1' + clean : clean;
+        };
+        const updated = currentChannels.map(ch => {
+          const callerData = cnamMap[normalize(ch.callerNum)] || {};
+          const calleeData = cnamMap[normalize(ch.calleeNum)] || {};
+          return {
+            ...ch,
+            callerName: callerData.name || ch.callerName,
+            callerCarrier: callerData.carrier || ch.callerCarrier,
+            callerState: callerData.state || ch.callerState,
+            calleeName: calleeData.name || ch.calleeName,
+            calleeCarrier: calleeData.carrier || ch.calleeCarrier,
+            calleeState: calleeData.state || ch.calleeState,
+            fraudScore: callerData.fraud_score !== undefined ? callerData.fraud_score : ch.fraudScore,
+          };
+        });
+        channels.setChannels(updated);
+      }
+      break;
+    }
+
     case 'dtmf_digit':
       ui.addLogEntry(`DTMF [${msg.channel}]: ${msg.digit} (${msg.direction})`);
+      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
       break;
 
     case 'transcript_start':

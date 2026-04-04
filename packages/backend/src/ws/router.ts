@@ -17,6 +17,7 @@ import { handleGetBalance, handleGetRefillHistory } from './handlers/billing';
 import { handleCnamLookup } from './handlers/cnam';
 import { handleStartListening as handleDtmfStart, handleStopListening as handleDtmfStop } from './handlers/dtmf';
 import { handleCreatePayment } from './handlers/payment';
+import { enrichChannels } from '../services/enrichment';
 import {
   handleGetStats,
   handleGetPermissions,
@@ -283,6 +284,11 @@ async function handleGetChannels(ws: ServerWebSocket<any>, session: SessionInfo,
 
   const formatted = formatChannelsForClient(userChannels, allChannels);
   send(ws, { type: 'channel_update', channels: formatted });
+
+  // Fire async CNAM + fraud enrichment (non-blocking, like V1's _send_cnam_update)
+  const canCnam = session.role === 'admin' || session.permissions.cnam_lookup !== false;
+  const canFraud = session.role === 'admin';
+  enrichChannels(ws, send, formatted, canCnam, canFraud).catch(() => {});
 }
 
 async function handleStartTranscript(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {

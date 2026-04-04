@@ -220,7 +220,9 @@ export type ServerMessage =
   | { type: 'fraud_result'; number: string; score: number; riskLevel: string; flags: string[] }
   | { type: 'cdr_result'; records: Record<string, unknown>[]; total: number; page?: number; perPage?: number }
   | { type: 'stats_result'; data: Record<string, unknown> }
+  | { type: 'callerid_info'; sipUser: string; callerid: string }
   | { type: 'callerid_updated'; sipUser: string; callerid: string }
+  | { type: 'cnam_update'; cnam_map: Record<string, any> }
   | { type: 'callerid_blocked'; sipUser: string; reason: string }
   | { type: 'call_originated'; sipUser: string; destination: string }
   | { type: 'online_users'; users: { username: string; role: string; sipUser?: string; ip?: string; connectedAt?: number }[] }

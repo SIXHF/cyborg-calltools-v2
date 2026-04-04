@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useChannelStore, type ExtendedChannel } from '../../stores/channelStore';
 import { useAuthStore } from '../../stores/authStore';
 import { wsSend } from '../../hooks/useWebSocket';
+import { TransferModal } from './TransferModal';
 
 /** Format seconds into mm:ss or hh:mm:ss */
 function formatDuration(seconds: number): string {
@@ -54,13 +55,14 @@ function displayState(state: string, rawState?: string): string {
   }
 }
 
-function ChannelRow({ ch, canDtmf, canTranscript, canAudio, canCost, isAdmin }: {
+function ChannelRow({ ch, canDtmf, canTranscript, canAudio, canCost, isAdmin, onTransfer }: {
   ch: ExtendedChannel;
   canDtmf: boolean;
   canTranscript: boolean;
   canAudio: boolean;
   canCost: boolean;
   isAdmin: boolean;
+  onTransfer: (channel: string, sipUser: string) => void;
 }) {
   const isUp = ch.state === 'answered';
   const trunk = isAdmin ? ch.trunk : '';
@@ -164,7 +166,7 @@ function ChannelRow({ ch, canDtmf, canTranscript, canAudio, canCost, isAdmin }: 
           {isUp && (
             <button
               className="btn-call-transfer"
-              onClick={() => {/* TODO: open transfer modal */}}
+              onClick={() => onTransfer(ch.id, ch.sipUser)}
             >
               &#8644; Transfer
             </button>
@@ -180,6 +182,7 @@ export function MonitorTab() {
   const { role, permissions } = useAuthStore();
   const selectedSip = useAuthStore(s => s.selectedSipUser);
   const [_, setTick] = useState(0);
+  const [transferTarget, setTransferTarget] = useState<{ channel: string; sipUser: string } | null>(null);
 
   const isAdmin = role === 'admin';
   const canDtmf = isAdmin || permissions.dtmf !== false;
@@ -242,6 +245,7 @@ export function MonitorTab() {
                   canAudio={canAudio}
                   canCost={canCost}
                   isAdmin={isAdmin}
+                  onTransfer={(ch, sip) => setTransferTarget({ channel: ch, sipUser: sip })}
                 />
               ))}
             </>
@@ -265,11 +269,21 @@ export function MonitorTab() {
                   canAudio={canAudio}
                   canCost={canCost}
                   isAdmin={isAdmin}
+                  onTransfer={(ch, sip) => setTransferTarget({ channel: ch, sipUser: sip })}
                 />
               ))}
             </>
           )}
         </div>
+      )}
+
+      {/* Transfer Modal */}
+      {transferTarget && (
+        <TransferModal
+          channel={transferTarget.channel}
+          sipUser={transferTarget.sipUser}
+          onClose={() => setTransferTarget(null)}
+        />
       )}
     </div>
   );

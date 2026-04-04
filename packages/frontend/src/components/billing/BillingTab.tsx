@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { wsSend } from '../../hooks/useWebSocket';
 import { useWsMessage } from '../../hooks/useWsMessage';
 
@@ -34,6 +34,9 @@ export function BillingTab() {
     if (refillMsg) { setRefills(refillMsg.records ?? []); setTotalRefills(refillMsg.total ?? 0); }
   }, [refillMsg]);
 
+  // Balance polling after payment (V1 parity)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => {
     if (paymentMsg) {
       setRechargeLoading(false);
@@ -43,9 +46,15 @@ export function BillingTab() {
         if (!win) {
           setRechargeStatus(`<a href="${url}" target="_blank" rel="noopener" class="text-ct-accent underline font-bold">Click here to open the payment page</a>`);
         } else {
-          setRechargeStatus('Invoice created! Payment page opened in new tab.');
+          setRechargeStatus('Invoice created! Payment page opened. Watching for payment...');
         }
       }
+      // Start polling balance every 15s for up to 1 hour
+      if (pollRef.current) clearInterval(pollRef.current);
+      const preBalance = balance;
+      pollRef.current = setInterval(() => wsSend({ cmd: 'get_balance' }), 15000);
+      // Stop after 1 hour
+      setTimeout(() => { if (pollRef.current) clearInterval(pollRef.current); }, 3600000);
     }
   }, [paymentMsg]);
 
