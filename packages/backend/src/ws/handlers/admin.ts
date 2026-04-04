@@ -250,22 +250,25 @@ export async function handleSetPermissions(
 
     if (!config.admin_restrictions) config.admin_restrictions = {};
 
+    // Strip account: prefix if present (frontend sends "account:cyborg" for user accounts)
+    const cleanTarget = target.startsWith('account:') ? target.slice(8) : target;
+
     // Check if target is a user account (cascade to SIP users like V1)
-    const userRows = await dbQuery<any>('SELECT id FROM pkg_user WHERE username = ? LIMIT 1', [target]);
+    const userRows = await dbQuery<any>('SELECT id FROM pkg_user WHERE username = ? LIMIT 1', [cleanTarget]);
     if (userRows.length > 0) {
       // It's a user account — cascade to all their SIP users
       if (!config.user_account_restrictions) config.user_account_restrictions = {};
-      config.user_account_restrictions[target] = permissions;
+      config.user_account_restrictions[cleanTarget] = permissions;
 
       const sipRows = await dbQuery<any>('SELECT name FROM pkg_sip WHERE id_user = ?', [userRows[0].id]);
       for (const sr of sipRows) {
         config.admin_restrictions[sr.name] = { ...permissions };
       }
-      auditLog(session.username, session.role, session.ip, 'set_permissions', target, `cascaded to ${sipRows.length} SIP users`);
+      auditLog(session.username, session.role, session.ip, 'set_permissions', cleanTarget, `cascaded to ${sipRows.length} SIP users`);
     } else {
       // It's a SIP user — set directly
-      config.admin_restrictions[target] = permissions;
-      auditLog(session.username, session.role, session.ip, 'set_permissions', target, JSON.stringify(permissions));
+      config.admin_restrictions[cleanTarget] = permissions;
+      auditLog(session.username, session.role, session.ip, 'set_permissions', cleanTarget, JSON.stringify(permissions));
     }
 
     await writeFile(PERMISSIONS_FILE, JSON.stringify(config, null, 2));
@@ -276,7 +279,7 @@ export async function handleSetPermissions(
     for (const s of sessions) {
       const sipUser = s.sipUser ?? (s.sipUsers?.[0]);
       // Check if this session is affected
-      const affected = s.sipUser === target || s.sipUsers?.includes(target) || s.username === target;
+      const affected = s.sipUser === cleanTarget || s.sipUsers?.includes(cleanTarget) || s.username === cleanTarget;
       if (affected && s.ws) {
         const newPerms = await resolvePermissions(s.role, sipUser, s.userId?.toString());
         s.permissions = newPerms;
