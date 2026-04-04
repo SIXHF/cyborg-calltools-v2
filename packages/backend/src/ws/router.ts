@@ -10,6 +10,8 @@ import {
   formatChannelsForClient,
 } from '../ami/channels';
 import { handleSetCallerId, handleGetCallerId } from './handlers/callerid';
+import { resolvePermissions } from '../auth/permissions';
+import { dbQuery } from '../db/mysql';
 import { handleOriginateCall } from './handlers/originate';
 import { handleTransferCall } from './handlers/transfer';
 import { handleGetCdr } from './handlers/cdr';
@@ -98,6 +100,10 @@ export async function routeMessage(
 
     case 'stop_transcript':
       await handleStopTranscript(ws, session, msg, send);
+      break;
+
+    case 'switch_sip_user':
+      await handleSwitchSipUser(ws, session, msg as any, send);
       break;
 
     case 'get_callerid':
@@ -289,6 +295,37 @@ async function handleGetChannels(ws: ServerWebSocket<any>, session: SessionInfo,
   const canCnam = session.role === 'admin' || session.permissions.cnam_lookup !== false;
   const canFraud = session.role === 'admin';
   enrichChannels(ws, send, formatted, canCnam, canFraud).catch(() => {});
+}
+
+async function handleSwitchSipUser(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {
+  const sipUser = (msg.sipUser || '').trim();
+  // Update session context
+  (session as any).selectedSipUser = sipUser || undefined;
+
+  // Resolve permissions for the selected SIP user
+  const perms = sipUser
+    ? await resolvePermissions(session.role, sipUser, session.userId?.toString())
+    : await resolvePermissions(session.role, session.sipUser, session.userId?.toString());
+  session.permissions = perms;
+
+  // Get callerid for the selected SIP user
+  let callerid = '';
+  let tollfreeBlocked = false;
+  if (sipUser) {
+    try {
+      const rows = await dbQuery<any>('SELECT callerid FROM pkg_sip WHERE name = ? LIMIT 1', [sipUser]);
+      callerid = rows[0]?.callerid || '';
+    } catch {}
+    tollfreeBlocked = !perms.allow_tollfree_callerid;
+  }
+
+  send(ws, {
+    type: 'sip_user_switched' as any,
+    sipUser: sipUser || '',
+    permissions: perms,
+    callerid,
+    tollfreeBlocked,
+  } as any);
 }
 
 async function handleStartTranscript(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {

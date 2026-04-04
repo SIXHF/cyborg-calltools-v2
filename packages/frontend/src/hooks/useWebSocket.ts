@@ -157,6 +157,17 @@ function handleMessage(event: MessageEvent) {
       window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
       break;
 
+    case 'sip_user_switched': {
+      const switched = msg as any;
+      auth.updatePermissions(switched.permissions);
+      // Store callerid and tollfree status
+      if (switched.callerid !== undefined) {
+        window.dispatchEvent(new CustomEvent('ws-message', { detail: { type: 'callerid_info', sipUser: switched.sipUser, callerid: switched.callerid } }));
+      }
+      ui.addLogEntry(`Switched to SIP user: ${switched.sipUser || 'All'}`);
+      break;
+    }
+
     case 'permissions_updated':
       auth.updatePermissions(msg.permissions);
       window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));

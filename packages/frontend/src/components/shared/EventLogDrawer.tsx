@@ -31,6 +31,14 @@ export function EventLogDrawer() {
           {lastEvent}
         </span>
         <div className="flex gap-2 items-center">
+          {expanded && eventLog.length > 0 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); useUiStore.getState().clearEventLog(); }}
+              className="text-[10px] text-ct-muted-dark hover:text-ct-red transition-colors"
+            >
+              Clear
+            </button>
+          )}
           <span className="text-[10px] text-ct-muted-dark">{eventLog.length} events</span>
           <span className="text-ct-muted text-xs">{expanded ? '▼' : '▲'}</span>
         </div>

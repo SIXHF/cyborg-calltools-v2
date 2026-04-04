@@ -20,6 +20,7 @@ interface UiState {
   addToast: (message: string, type?: 'success' | 'error' | 'info', duration?: number) => void;
   removeToast: (id: string) => void;
   addLogEntry: (entry: string) => void;
+  clearEventLog: () => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -50,4 +51,6 @@ export const useUiStore = create<UiState>((set) => ({
       const log = [`[${new Date().toLocaleTimeString()}] ${entry}`, ...s.eventLog];
       return { eventLog: log.slice(0, 500) }; // Cap at 500 entries
     }),
+
+  clearEventLog: () => set({ eventLog: [] }),
 }));

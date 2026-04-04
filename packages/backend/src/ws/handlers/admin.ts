@@ -51,7 +51,7 @@ export async function handleGetStats(
       dbQuery<any>('SELECT id_trunk, COUNT(*) as cnt FROM pkg_cdr WHERE starttime >= ? GROUP BY id_trunk', [shiftStart]),
       dbQuery<any>('SELECT id_trunk, COUNT(*) as cnt FROM pkg_cdr_failed WHERE starttime >= ? GROUP BY id_trunk', [shiftStart]),
       dbQuery<any>('SELECT calledstation, COUNT(*) as cnt FROM pkg_cdr WHERE starttime >= ? GROUP BY calledstation ORDER BY cnt DESC LIMIT 10', [shiftStart]),
-      dbQuery<any>('SELECT id_trunk, AVG(sessiontime), SUM(buycost), COUNT(*), SUM(sessionbill), SUM(sessiontime) FROM pkg_cdr WHERE starttime >= ? GROUP BY id_trunk', [shiftStart]),
+      dbQuery<any>('SELECT id_trunk, AVG(sessiontime) as avg_session, SUM(buycost) as total_buy, COUNT(*) as call_count, SUM(sessionbill) as total_bill, SUM(sessiontime) as total_session FROM pkg_cdr WHERE starttime >= ? GROUP BY id_trunk', [shiftStart]),
       dbQuery<any>('SELECT COALESCE(MAX(cps), 0) as v FROM pkg_status_system WHERE date >= ?', [shiftStart]),
       dbQuery<any>('SELECT COALESCE(MAX(total), 0) as v FROM pkg_call_chart WHERE date >= ?', [shiftStart]),
       dbQuery<any>('SELECT COALESCE(SUM(credit), 0) as v FROM pkg_refill WHERE date >= ?', [shiftStart]),
@@ -108,11 +108,11 @@ export async function handleGetStats(
     const trunkPerformance: any[] = [];
     for (const row of trunkPerfRows) {
       const tid = String(row.id_trunk);
-      const acd = parseFloat(row['AVG(sessiontime)']) || 0;
-      const totalCost = parseFloat(row['SUM(buycost)']) || 0;
-      const callCount = parseInt(row['COUNT(*)']) || 0;
-      const totalRevenue = parseFloat(row['SUM(sessionbill)']) || 0;
-      const totalSeconds = parseFloat(row['SUM(sessiontime)']) || 0;
+      const acd = parseFloat(row.avg_session) || 0;
+      const totalCost = parseFloat(row.total_buy) || 0;
+      const callCount = parseInt(row.call_count) || 0;
+      const totalRevenue = parseFloat(row.total_bill) || 0;
+      const totalSeconds = parseFloat(row.total_session) || 0;
       trunkPerformance.push({
         trunk_id: tid, trunk_name: tnMap[tid] ?? `Trunk ${tid}`,
         acd_seconds: Math.round(acd * 10) / 10,

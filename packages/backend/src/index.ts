@@ -194,6 +194,16 @@ const server = Bun.serve({
         const session = await createSession(authResult.user!, clientIp, ws);
         ws.data.token = session.token;
 
+        // Fetch current callerid for the user's primary SIP extension
+        let currentCallerid = '';
+        const primarySip = session.sipUser ?? session.sipUsers?.[0];
+        if (primarySip) {
+          try {
+            const cidRows = await import('./db/mysql').then(m => m.dbQuery<any>('SELECT callerid FROM pkg_sip WHERE name = ? LIMIT 1', [primarySip]));
+            currentCallerid = cidRows[0]?.callerid || '';
+          } catch {}
+        }
+
         send(ws, {
           type: 'auth_ok',
           token: session.token,

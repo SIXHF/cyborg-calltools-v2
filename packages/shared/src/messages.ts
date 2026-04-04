@@ -37,6 +37,12 @@ export const StopTranscriptMessage = z.object({
   channel: z.string().min(1),
 });
 
+export const SwitchSipUserMessage = z.object({
+  cmd: z.literal('switch_sip_user'),
+  sipUser: z.string().optional(),
+  account: z.string().optional(),
+});
+
 export const GetCallerIdMessage = z.object({
   cmd: z.literal('get_callerid'),
   sipUser: z.string().optional(),
@@ -174,6 +180,7 @@ export const ClientMessage = z.discriminatedUnion('cmd', [
   StopListeningMessage,
   StartTranscriptMessage,
   StopTranscriptMessage,
+  SwitchSipUserMessage,
   GetCallerIdMessage,
   SetCallerIdMessage,
   OriginateCallMessage,
@@ -220,6 +227,7 @@ export type ServerMessage =
   | { type: 'fraud_result'; number: string; score: number; riskLevel: string; flags: string[] }
   | { type: 'cdr_result'; records: Record<string, unknown>[]; total: number; page?: number; perPage?: number }
   | { type: 'stats_result'; data: Record<string, unknown> }
+  | { type: 'sip_user_switched'; sipUser: string; permissions: Record<string, boolean>; callerid: string; tollfreeBlocked: boolean }
   | { type: 'callerid_info'; sipUser: string; callerid: string }
   | { type: 'callerid_updated'; sipUser: string; callerid: string }
   | { type: 'cnam_update'; cnam_map: Record<string, any> }

@@ -27,6 +27,8 @@ export function Header() {
 
   const handleSipChange = (value: string) => {
     setSelectedSip(value);
+    // Tell server about the switch — returns updated permissions, callerid, tollfree
+    wsSend({ cmd: 'switch_sip_user', sipUser: value || '' });
     // Refresh channels with new SIP filter
     wsSend({ cmd: 'get_channels', targetSip: value || undefined });
   };
