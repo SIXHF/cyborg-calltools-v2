@@ -509,8 +509,8 @@ export async function handleAddCredit(
   try {
     await dbQuery('UPDATE pkg_user SET credit = credit + ? WHERE id = ?', [amount, targetUserId]);
     await dbQuery(
-      'INSERT INTO pkg_refill (id_user, credit, description, payment, date) VALUES (?, ?, ?, ?, NOW())',
-      [targetUserId, amount, `Manual: ${note}`, `Admin: ${session.username}`]
+      'INSERT INTO pkg_refill (id_user, credit, description, payment, date) VALUES (?, ?, ?, 1, NOW())',
+      [targetUserId, amount, `Manual by ${session.username}: ${note}`]
     );
 
     auditLog(session.username, session.role, session.ip, 'add_credit', String(targetUserId), `${amount} - ${note}`);

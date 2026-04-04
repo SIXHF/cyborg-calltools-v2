@@ -81,7 +81,11 @@ function StatsDashboard() {
                 <div className="flex flex-wrap gap-2 mt-1">
                   {group.trunks.map((t: any, i: number) => (
                     <span key={i} className="text-xs font-mono bg-ct-bg px-2 py-0.5 rounded border border-ct-border-solid">
-                      {t.name}{t.balance != null ? ` ($${t.balance.toFixed(2)})` : ''}
+                      {t.name}{t.balance != null && (
+                        <span style={{ color: t.balance < 10 ? '#f85149' : t.balance < 50 ? '#d29922' : '#3fb950', marginLeft: 4 }}>
+                          (${t.balance.toFixed(2)})
+                        </span>
+                      )}
                     </span>
                   ))}
                 </div>
