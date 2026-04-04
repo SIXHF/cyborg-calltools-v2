@@ -212,6 +212,7 @@ const server = Bun.serve({
           version: VERSION,
           permissions: session.permissions as unknown as Record<string, boolean>,
           sipUsers: session.sipUsers ?? [],
+          sipGroups: authResult.user!.sipGroups,
         });
 
         auditLog(session.username, session.role, clientIp, 'login');

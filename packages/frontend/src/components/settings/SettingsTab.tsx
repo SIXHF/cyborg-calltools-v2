@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { useWsMessage } from '../../hooks/useWsMessage';
 import { getNotifSettings, saveNotifSettings } from '../../utils/audio';
+
+const TOLL_FREE_PREFIXES = ['1800', '1833', '1844', '1855', '1866', '1877', '1888'];
 
 export function SettingsTab() {
   const { sipUsers, role, permissions } = useAuthStore();
@@ -50,6 +52,13 @@ export function SettingsTab() {
   };
 
   const canEditCallerid = role === 'admin' || permissions.caller_id !== false;
+
+  const isTollFree = useMemo(() => {
+    const trimmed = callerid.trim();
+    return TOLL_FREE_PREFIXES.some(prefix => trimmed.startsWith(prefix));
+  }, [callerid]);
+
+  const showTollFreeWarning = isTollFree && permissions.allow_tollfree_callerid === false;
 
   return (
     <div className="space-y-5 animate-fade-in" role="tabpanel" id="panel-settings">
@@ -99,6 +108,15 @@ export function SettingsTab() {
                   </button>
                 </div>
               </div>
+              {showTollFreeWarning && (
+                <div
+                  className="flex items-start gap-2 px-4 py-3 rounded-lg text-[13px]"
+                  style={{ background: 'rgba(210, 153, 34, 0.15)', border: '1px solid rgba(210, 153, 34, 0.4)', color: '#d29922' }}
+                >
+                  <span className="text-base leading-none mt-0.5">{'\u26A0'}</span>
+                  <span>Toll-free caller IDs (800, 833, 844, 855, 866, 877, 888) are not allowed for this account.</span>
+                </div>
+              )}
               {savedMsg && <div className="text-ct-green text-xs">{savedMsg}</div>}
               {!selectedSip && (role === 'admin' || role === 'user') && (
                 <div className="text-ct-yellow text-xs">Select a specific SIP user to edit Caller ID.</div>
@@ -115,8 +133,106 @@ export function SettingsTab() {
         </div>
       </div>
 
+      {/* SIP Account Info */}
+      <SipAccountInfo />
+
       {/* Notification Preferences — persisted to localStorage */}
       <NotificationSettings />
+    </div>
+  );
+}
+
+interface SipExtension {
+  name: string;
+  callerid: string;
+  host: string;
+  codecs: string;
+  secret: string;
+  registered: boolean;
+}
+
+function SipAccountInfo() {
+  const sipInfoMsg = useWsMessage<{ type: string; extensions: SipExtension[] }>('sip_info');
+  const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    wsSend({ cmd: 'get_sip_info' });
+  }, []);
+
+  useEffect(() => {
+    if (sipInfoMsg) setLoaded(true);
+  }, [sipInfoMsg]);
+
+  const extensions = sipInfoMsg?.extensions ?? [];
+
+  const toggleSecret = (name: string) => {
+    setShowSecrets(prev => ({ ...prev, [name]: !prev[name] }));
+  };
+
+  return (
+    <div className="glass-panel">
+      <div className="panel-header">
+        <h2>SIP Account Info</h2>
+      </div>
+      <div className="p-5">
+        {!loaded ? (
+          <p className="text-ct-muted text-sm">Loading SIP info...</p>
+        ) : extensions.length === 0 ? (
+          <p className="text-ct-muted text-sm">No SIP extensions found.</p>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {extensions.map(ext => (
+              <div
+                key={ext.name}
+                className="rounded-lg border border-ct-border-solid p-4 space-y-2"
+                style={{ background: 'rgba(21, 26, 35, 0.5)' }}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-ct-accent font-mono text-sm font-semibold">{ext.name}</span>
+                  <span
+                    className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                    style={ext.registered
+                      ? { background: 'rgba(63, 185, 80, 0.15)', color: '#3fb950' }
+                      : { background: 'rgba(248, 81, 73, 0.15)', color: '#f85149' }
+                    }
+                  >
+                    {ext.registered ? 'Registered' : 'Unregistered'}
+                  </span>
+                </div>
+                <div className="space-y-1 text-[12px]">
+                  <div className="flex justify-between">
+                    <span className="text-ct-muted">Caller ID</span>
+                    <span className="text-ct-text-secondary font-mono">{ext.callerid || '(none)'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-ct-muted">Codecs</span>
+                    <span className="text-ct-text-secondary font-mono">{ext.codecs || '(default)'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-ct-muted">Host</span>
+                    <span className="text-ct-text-secondary font-mono">{ext.host || 'dynamic'}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-ct-muted">Password</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-ct-text-secondary font-mono">
+                        {showSecrets[ext.name] ? ext.secret : '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
+                      </span>
+                      <button
+                        onClick={() => toggleSecret(ext.name)}
+                        className="text-[11px] text-ct-accent hover:underline"
+                      >
+                        {showSecrets[ext.name] ? 'hide' : 'show'}
+                      </button>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

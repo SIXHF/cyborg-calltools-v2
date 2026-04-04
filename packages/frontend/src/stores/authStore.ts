@@ -1,12 +1,18 @@
 import { create } from 'zustand';
 import type { UserRole, Permissions } from '@calltools/shared';
 
+interface SipGroup {
+  account: string;
+  sipUsers: string[];
+}
+
 interface AuthState {
   isAuthenticated: boolean;
   token: string | null;
   username: string | null;
   role: UserRole | null;
   sipUsers: string[];
+  sipGroups: SipGroup[];
   permissions: Partial<Permissions>;
   version: string | null;
   selectedSipUser: string | null;
@@ -18,6 +24,7 @@ interface AuthState {
     version: string;
     permissions: Record<string, boolean>;
     sipUsers: string[];
+    sipGroups?: SipGroup[];
   }) => void;
   resume: (data: { username: string; role: UserRole }) => void;
   logout: () => void;
@@ -31,6 +38,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   username: null,
   role: null,
   sipUsers: [],
+  sipGroups: [],
   permissions: {},
   version: null,
   selectedSipUser: null,
@@ -45,6 +53,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       version: data.version,
       permissions: data.permissions,
       sipUsers: data.sipUsers,
+      sipGroups: data.sipGroups ?? [],
     });
   },
 
@@ -64,6 +73,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       username: null,
       role: null,
       sipUsers: [],
+      sipGroups: [],
       permissions: {},
       version: null,
     });

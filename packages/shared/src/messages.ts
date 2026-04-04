@@ -145,6 +145,10 @@ export const GetChannelsMessage = z.object({
   targetSip: z.string().optional(),
 });
 
+export const GetSipInfoMessage = z.object({
+  cmd: z.literal('get_sip_info'),
+});
+
 export const GetStatsMessage = z.object({
   cmd: z.literal('get_stats'),
 });
@@ -164,6 +168,13 @@ export const AdminForceLogoutMessage = z.object({
 export const AdminBroadcastMessage = z.object({
   cmd: z.literal('admin_broadcast'),
   message: z.string().min(1).max(500),
+  color: z.enum(['orange', 'red', 'green']).optional(),
+});
+
+export const GetSipUsageMessage = z.object({
+  cmd: z.literal('get_sip_usage'),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
 });
 
 export const AdminClearRateLimitMessage = z.object({
@@ -196,6 +207,7 @@ export const ClientMessage = z.discriminatedUnion('cmd', [
   TransferCallMessage,
   CreatePaymentMessage,
   GetChannelsMessage,
+  GetSipInfoMessage,
   GetCdrMessage,
   GetBalanceMessage,
   GetRefillHistoryMessage,
@@ -211,6 +223,7 @@ export const ClientMessage = z.discriminatedUnion('cmd', [
   AdminBroadcastMessage,
   AdminClearRateLimitMessage,
   AdminApproveAudioMessage,
+  GetSipUsageMessage,
 ]);
 
 export type ClientMessageType = z.infer<typeof ClientMessage>;
@@ -218,7 +231,7 @@ export type ClientMessageType = z.infer<typeof ClientMessage>;
 // ── Server → Client Messages ────────────────────────────────────────
 
 export type ServerMessage =
-  | { type: 'auth_ok'; token: string; username: string; role: string; version: string; permissions: Record<string, boolean>; sipUsers: string[] }
+  | { type: 'auth_ok'; token: string; username: string; role: string; version: string; permissions: Record<string, boolean>; sipUsers: string[]; sipGroups?: Array<{ account: string; sipUsers: string[] }> }
   | { type: 'auth_error'; message: string }
   | { type: 'resume_ok'; username: string; role: string }
   | { type: 'resume_failed'; reason: string }
@@ -241,7 +254,8 @@ export type ServerMessage =
   | { type: 'callerid_blocked'; sipUser: string; reason: string }
   | { type: 'call_originated'; sipUser: string; destination: string }
   | { type: 'online_users'; users: { username: string; role: string; sipUser?: string; ip?: string; connectedAt?: number }[] }
-  | { type: 'admin_broadcast'; message: string; from: string }
+  | { type: 'admin_broadcast'; message: string; from: string; color?: 'orange' | 'red' | 'green' }
+  | { type: 'sip_usage_result'; stats: Array<{ sipUser: string; answered: number; failed: number; total: number; minutes: number; cost: number; asr: number }>; totals: { answered: number; failed: number; total: number; minutes: number; cost: number } }
   | { type: 'permissions_updated'; permissions: Record<string, boolean> }
   | { type: 'permissions_data'; config: Record<string, unknown> }
   | { type: 'billing_update'; balance: number; currency: string }
@@ -250,5 +264,6 @@ export type ServerMessage =
   | { type: 'payment_created'; payment_url: string; order_id: string; amount: string }
   | { type: 'transfer_initiated'; channel: string; destination: string; transferType: string }
   | { type: 'audit_log'; lines: string[] }
+  | { type: 'sip_info'; extensions: Array<{ name: string; callerid: string; host: string; codecs: string; secret: string; registered: boolean }> }
   | { type: 'error'; message: string; code?: string }
   | { type: 'pong' };

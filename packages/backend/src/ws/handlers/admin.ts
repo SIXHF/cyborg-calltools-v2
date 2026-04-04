@@ -343,10 +343,11 @@ export async function handleBroadcast(
     return;
   }
 
+  const color = msg.color || undefined;
   auditLog(session.username, session.role, session.ip, 'broadcast', message);
 
   if (broadcastToAll) {
-    broadcastToAll({ type: 'admin_broadcast', message, from: session.username });
+    broadcastToAll({ type: 'admin_broadcast', message, from: session.username, ...(color ? { color } : {}) });
   }
 
   send(ws, { type: 'admin_broadcast', message: `Broadcast sent: "${message}"`, from: 'system' });

@@ -595,28 +595,153 @@ function ManualCreditPanel() {
   );
 }
 
-// ── Broadcast Panel ──
+// ── Broadcast Panel (V1 parity: color picker, online users, history) ──
+
+interface BroadcastHistoryEntry {
+  timestamp: number;
+  message: string;
+  color?: string;
+}
+
+const BROADCAST_COLORS = [
+  { value: undefined, label: 'Default', bg: 'bg-ct-border-solid', text: 'text-ct-text' },
+  { value: 'orange' as const, label: 'Orange', bg: 'bg-[#5c3d00]', text: 'text-ct-yellow' },
+  { value: 'red' as const, label: 'Red', bg: 'bg-ct-red-bg', text: 'text-ct-red' },
+  { value: 'green' as const, label: 'Green', bg: 'bg-ct-green-bg', text: 'text-ct-green' },
+] as const;
+
+function loadBroadcastHistory(): BroadcastHistoryEntry[] {
+  try {
+    return JSON.parse(localStorage.getItem('ct2_broadcast_history') || '[]');
+  } catch { return []; }
+}
+
+function saveBroadcastHistory(entries: BroadcastHistoryEntry[]) {
+  localStorage.setItem('ct2_broadcast_history', JSON.stringify(entries.slice(0, 20)));
+}
 
 function BroadcastPanel() {
   const [message, setMessage] = useState('');
+  const [color, setColor] = useState<'orange' | 'red' | 'green' | undefined>(undefined);
+  const [history, setHistory] = useState<BroadcastHistoryEntry[]>(loadBroadcastHistory);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const sessionsMsg = useWsMessage<any>('online_users');
 
-  const send = () => {
+  useEffect(() => {
+    wsSend({ cmd: 'get_sessions' });
+    const interval = setInterval(() => wsSend({ cmd: 'get_sessions' }), 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => { if (sessionsMsg?.users) setSessions(sessionsMsg.users); }, [sessionsMsg]);
+
+  const sendBroadcast = () => {
     if (!message.trim()) return;
-    wsSend({ cmd: 'admin_broadcast', message: message.trim() });
+    const entry: BroadcastHistoryEntry = { timestamp: Date.now(), message: message.trim(), color };
+    wsSend({ cmd: 'admin_broadcast', message: message.trim(), ...(color ? { color } : {}) });
+    const updated = [entry, ...history].slice(0, 20);
+    setHistory(updated);
+    saveBroadcastHistory(updated);
     setMessage('');
   };
 
+  const clearHistory = () => {
+    setHistory([]);
+    localStorage.removeItem('ct2_broadcast_history');
+  };
+
   return (
-    <div className="glass-panel">
-      <div className="panel-header"><h2>Send Broadcast</h2></div>
-      <div className="p-4 space-y-3">
-        <div>
-          <label className="block text-[13px] text-ct-muted mb-1">Message</label>
-          <textarea value={message} onChange={e => setMessage(e.target.value)} placeholder="Message to broadcast to all users..."
-            className="form-input !h-20 resize-none" maxLength={500} />
-          <div className="text-[11px] text-ct-muted-dark mt-1">{message.length}/500</div>
+    <div className="space-y-5">
+      {/* Send Form */}
+      <div className="glass-panel">
+        <div className="panel-header"><h2>Send Broadcast</h2></div>
+        <div className="p-4 space-y-3">
+          <div>
+            <label className="block text-[13px] text-ct-muted mb-1">Message</label>
+            <textarea value={message} onChange={e => setMessage(e.target.value)} placeholder="Message to broadcast to all users..."
+              className="form-input !h-20 resize-none" maxLength={500} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendBroadcast(); } }} />
+            <div className="text-[11px] text-ct-muted-dark mt-1">{message.length}/500</div>
+          </div>
+
+          {/* Color Picker */}
+          <div>
+            <label className="block text-[13px] text-ct-muted mb-1.5">Color</label>
+            <div className="flex gap-2">
+              {BROADCAST_COLORS.map(c => (
+                <button
+                  key={c.label}
+                  onClick={() => setColor(c.value as any)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                    color === c.value
+                      ? `${c.bg} ${c.text} border-current ring-1 ring-current`
+                      : `bg-ct-surface-solid text-ct-muted border-ct-border-solid hover:border-ct-border-hover`
+                  }`}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button onClick={sendBroadcast} disabled={!message.trim()} className="btn btn-primary">Send Broadcast</button>
         </div>
-        <button onClick={send} disabled={!message.trim()} className="btn btn-primary">Send Broadcast</button>
+      </div>
+
+      {/* Online Users */}
+      <div className="glass-panel">
+        <div className="panel-header">
+          <h2>Online Users</h2>
+          <div className="flex items-center gap-2">
+            <span className="text-ct-muted text-xs">{sessions.length} connected</span>
+            <button onClick={() => wsSend({ cmd: 'get_sessions' })} className="btn btn-sm">Refresh</button>
+          </div>
+        </div>
+        {sessions.length === 0 ? <div className="empty-state">No users online.</div> : (
+          <div className="max-h-48 overflow-y-auto">
+            {sessions.map((s, i) => (
+              <div key={i} className="flex items-center gap-3 px-4 py-2 border-b border-ct-border-solid/50 last:border-b-0 text-sm">
+                <span className="w-2 h-2 rounded-full bg-ct-green flex-shrink-0" style={{ boxShadow: '0 0 6px #3fb95066' }} />
+                <span className="text-ct-accent font-semibold">{s.username}</span>
+                <span className={`text-[11px] px-2 py-0.5 rounded-[10px] font-semibold uppercase tracking-wider ${
+                  s.role === 'admin' ? 'bg-[#2d1b00] text-ct-yellow' : s.role === 'user' ? 'bg-[#1a1040] text-ct-purple-dark' : 'bg-ct-green-bg text-ct-green'
+                }`}>{s.role}</span>
+                {s.sipUser && <span className="text-ct-muted font-mono text-xs">{s.sipUser}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Broadcast History */}
+      <div className="glass-panel">
+        <div className="panel-header">
+          <h2>Broadcast History</h2>
+          {history.length > 0 && (
+            <button onClick={clearHistory} className="btn btn-sm btn-danger">Clear All</button>
+          )}
+        </div>
+        {history.length === 0 ? <div className="empty-state">No broadcasts sent yet.</div> : (
+          <div className="max-h-60 overflow-y-auto">
+            {history.map((h, i) => (
+              <div key={i} className="flex items-start gap-3 px-4 py-2.5 border-b border-ct-border-solid/50 last:border-b-0">
+                <span className="text-[11px] text-ct-muted-dark whitespace-nowrap mt-0.5">{new Date(h.timestamp).toLocaleString()}</span>
+                <span className={`text-[13px] flex-1 ${
+                  h.color === 'red' ? 'text-ct-red' :
+                  h.color === 'green' ? 'text-ct-green' :
+                  h.color === 'orange' ? 'text-ct-yellow' :
+                  'text-ct-text-secondary'
+                }`}>{h.message}</span>
+                {h.color && (
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                    h.color === 'red' ? 'bg-ct-red-bg text-ct-red' :
+                    h.color === 'green' ? 'bg-ct-green-bg text-ct-green' :
+                    'bg-[#5c3d00] text-ct-yellow'
+                  }`}>{h.color}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

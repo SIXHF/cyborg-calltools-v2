@@ -39,6 +39,7 @@ function handleMessage(event: MessageEvent) {
         version: msg.version,
         permissions: msg.permissions,
         sipUsers: msg.sipUsers,
+        sipGroups: (msg as any).sipGroups,
       });
       ui.addLogEntry('Authenticated successfully.');
       ui.addToast('Logged in!', 'success', 2000);
@@ -175,13 +176,20 @@ function handleMessage(event: MessageEvent) {
       window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
       break;
 
-    case 'admin_broadcast':
-      ui.addToast(`[${msg.from}] ${msg.message}`, 'info', 10000);
+    case 'admin_broadcast': {
+      const broadcastColor = (msg as any).color as string | undefined;
+      const toastType: 'success' | 'error' | 'info' =
+        broadcastColor === 'green' ? 'success' :
+        broadcastColor === 'red' ? 'error' : 'info';
+      ui.addToast(`[${msg.from}] ${msg.message}`, toastType, 10000);
       ui.addLogEntry(`Broadcast from ${msg.from}: ${msg.message}`);
       if ('Notification' in window && Notification.permission === 'granted') {
         new Notification(`CallTools: ${msg.from}`, { body: msg.message });
       }
+      // Dispatch so BroadcastPanel can update history
+      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
       break;
+    }
 
     case 'error':
       ui.addToast(msg.message, 'error');

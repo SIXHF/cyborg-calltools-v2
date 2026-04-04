@@ -24,9 +24,14 @@ const activeSessions = new Map<string, Session>();
 const disconnectedSessions = new Map<string, Session>();
 const invalidatedTokens = new Set<string>();
 
+interface SipGroup {
+  account: string;
+  sipUsers: string[];
+}
+
 interface AuthResult {
   success: boolean;
-  user?: { username: string; role: UserRole; userId?: number; sipUser?: string; sipUsers?: string[] };
+  user?: { username: string; role: UserRole; userId?: number; sipUser?: string; sipUsers?: string[]; sipGroups?: SipGroup[] };
   error?: string;
 }
 
@@ -93,6 +98,24 @@ export async function authenticate(username: string, password: string, clientIp:
     ? await dbQuery<{ name: string }>('SELECT name FROM pkg_sip ORDER BY name')
     : await dbQuery<{ name: string }>('SELECT name FROM pkg_sip WHERE id_user = ?', [user.id]);
 
+  // Build sipGroups (SIP users grouped by parent account)
+  const groupRows = role === 'admin'
+    ? await dbQuery<{ username: string; name: string }>(
+        'SELECT u.username, s.name FROM pkg_sip s JOIN pkg_user u ON s.id_user = u.id ORDER BY u.username, s.name'
+      )
+    : await dbQuery<{ username: string; name: string }>(
+        'SELECT u.username, s.name FROM pkg_sip s JOIN pkg_user u ON s.id_user = u.id WHERE s.id_user = ? ORDER BY u.username, s.name',
+        [user.id]
+      );
+
+  const groupMap = new Map<string, string[]>();
+  for (const row of groupRows) {
+    const list = groupMap.get(row.username) ?? [];
+    list.push(row.name);
+    groupMap.set(row.username, list);
+  }
+  const sipGroups: SipGroup[] = Array.from(groupMap.entries()).map(([account, sips]) => ({ account, sipUsers: sips }));
+
   return {
     success: true,
     user: {
@@ -100,6 +123,7 @@ export async function authenticate(username: string, password: string, clientIp:
       role,
       userId: user.id,
       sipUsers: sipUsers.map(s => s.name),
+      sipGroups,
     },
   };
 }

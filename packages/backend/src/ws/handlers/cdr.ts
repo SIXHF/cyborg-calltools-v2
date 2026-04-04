@@ -3,6 +3,128 @@ import { dbQuery } from '../../db/mysql';
 
 type SendFn = (ws: ServerWebSocket<any>, msg: any) => void;
 
+export async function handleGetSipUsage(
+  ws: ServerWebSocket<any>,
+  session: any,
+  msg: any,
+  send: SendFn
+) {
+  const dateFrom = (msg.dateFrom ?? '').trim();
+  const dateTo = (msg.dateTo ?? '').trim();
+
+  // Build date conditions
+  const cdrConditions: string[] = [];
+  const failedConditions: string[] = [];
+  const cdrParams: any[] = [];
+  const failedParams: any[] = [];
+
+  if (dateFrom) {
+    const safeDate = dateFrom.replace(/[^0-9-]/g, '').slice(0, 10);
+    cdrConditions.push('starttime >= ?');
+    failedConditions.push('starttime >= ?');
+    cdrParams.push(`${safeDate} 00:00:00`);
+    failedParams.push(`${safeDate} 00:00:00`);
+  } else {
+    // Default to today
+    cdrConditions.push('starttime >= CURDATE()');
+    failedConditions.push('starttime >= CURDATE()');
+  }
+
+  if (dateTo) {
+    const safeDate = dateTo.replace(/[^0-9-]/g, '').slice(0, 10);
+    cdrConditions.push('starttime <= ?');
+    failedConditions.push('starttime <= ?');
+    cdrParams.push(`${safeDate} 23:59:59`);
+    failedParams.push(`${safeDate} 23:59:59`);
+  }
+
+  // Role-based filtering for non-admin users
+  if (session.role === 'sip_user') {
+    cdrConditions.push('src = ?');
+    failedConditions.push('src = ?');
+    cdrParams.push(session.sipUser);
+    failedParams.push(session.sipUser);
+  } else if (session.role === 'user') {
+    const sipUsers = session.sipUsers ?? [];
+    if (sipUsers.length > 0) {
+      const placeholders = sipUsers.map(() => '?').join(',');
+      cdrConditions.push(`src IN (${placeholders})`);
+      failedConditions.push(`src IN (${placeholders})`);
+      cdrParams.push(...sipUsers);
+      failedParams.push(...sipUsers);
+    } else {
+      cdrConditions.push('1=0');
+      failedConditions.push('1=0');
+    }
+  }
+  // Admin sees all
+
+  const cdrWhere = cdrConditions.length > 0 ? cdrConditions.join(' AND ') : '1=1';
+  const failedWhere = failedConditions.length > 0 ? failedConditions.join(' AND ') : '1=1';
+
+  try {
+    const [answeredRows, failedRows] = await Promise.all([
+      dbQuery<{ src: string; calls: number; seconds: number; cost: number }>(
+        `SELECT src, COUNT(*) as calls, COALESCE(SUM(sessiontime), 0) as seconds, COALESCE(SUM(sessionbill), 0) as cost FROM pkg_cdr WHERE ${cdrWhere} GROUP BY src`,
+        cdrParams
+      ),
+      dbQuery<{ src: string; calls: number }>(
+        `SELECT src, COUNT(*) as calls FROM pkg_cdr_failed WHERE ${failedWhere} GROUP BY src`,
+        failedParams
+      ),
+    ]);
+
+    // Merge into per-SIP stats
+    const sipMap = new Map<string, { answered: number; failed: number; seconds: number; cost: number }>();
+
+    for (const row of answeredRows) {
+      sipMap.set(row.src, {
+        answered: Number(row.calls),
+        failed: 0,
+        seconds: Number(row.seconds),
+        cost: Number(row.cost),
+      });
+    }
+
+    for (const row of failedRows) {
+      const existing = sipMap.get(row.src);
+      if (existing) {
+        existing.failed = Number(row.calls);
+      } else {
+        sipMap.set(row.src, { answered: 0, failed: Number(row.calls), seconds: 0, cost: 0 });
+      }
+    }
+
+    const stats = Array.from(sipMap.entries()).map(([sipUser, data]) => ({
+      sipUser,
+      answered: data.answered,
+      failed: data.failed,
+      total: data.answered + data.failed,
+      minutes: Math.round((data.seconds / 60) * 100) / 100,
+      cost: Math.round(data.cost * 10000) / 10000,
+      asr: data.answered + data.failed > 0
+        ? Math.round((data.answered / (data.answered + data.failed)) * 100)
+        : 0,
+    })).sort((a, b) => b.total - a.total);
+
+    const totals = stats.reduce(
+      (acc, s) => ({
+        answered: acc.answered + s.answered,
+        failed: acc.failed + s.failed,
+        total: acc.total + s.total,
+        minutes: Math.round((acc.minutes + s.minutes) * 100) / 100,
+        cost: Math.round((acc.cost + s.cost) * 10000) / 10000,
+      }),
+      { answered: 0, failed: 0, total: 0, minutes: 0, cost: 0 }
+    );
+
+    send(ws, { type: 'sip_usage_result', stats, totals });
+  } catch (err) {
+    console.error('[SIP Usage] Query error:', err);
+    send(ws, { type: 'error', message: 'Failed to fetch SIP usage.', code: 'DB_ERROR' });
+  }
+}
+
 export async function handleGetCdr(
   ws: ServerWebSocket<any>,
   session: any,

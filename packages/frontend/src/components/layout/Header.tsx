@@ -12,6 +12,7 @@ export function Header() {
   const { wsConnected } = useUiStore();
   const selectedSip = useAuthStore(s => s.selectedSipUser);
   const setSelectedSip = useAuthStore(s => s.setSelectedSipUser);
+  const sipGroups = useAuthStore(s => s.sipGroups);
   const balanceMsg = useWsMessage<any>('billing_update');
 
   const roleLabel = role === 'admin' ? 'Admin' : role === 'user' ? 'User' : 'SIP';
@@ -27,10 +28,17 @@ export function Header() {
 
   const handleSipChange = (value: string) => {
     setSelectedSip(value);
-    // Tell server about the switch — returns updated permissions, callerid, tollfree
-    wsSend({ cmd: 'switch_sip_user', sipUser: value || '' });
-    // Refresh channels with new SIP filter
-    wsSend({ cmd: 'get_channels', targetSip: value || undefined });
+    if (value.startsWith('account:')) {
+      const accountName = value.slice('account:'.length);
+      // Tell server to switch to account-level filtering
+      wsSend({ cmd: 'switch_sip_user', sipUser: '', account: accountName });
+      wsSend({ cmd: 'get_channels', targetSip: undefined });
+    } else {
+      // Tell server about the switch — returns updated permissions, callerid, tollfree
+      wsSend({ cmd: 'switch_sip_user', sipUser: value || '' });
+      // Refresh channels with new SIP filter
+      wsSend({ cmd: 'get_channels', targetSip: value || undefined });
+    }
   };
 
   return (
@@ -54,9 +62,22 @@ export function Header() {
               style={{ background: 'transparent' }}
             >
               <option value="" style={{ background: '#161b22', color: '#c9d1d9' }}>All</option>
-              {sipUsers.map(s => (
-                <option key={s} value={s} style={{ background: '#161b22', color: '#c9d1d9' }}>{s}</option>
-              ))}
+              {sipGroups && sipGroups.length > 0 ? (
+                sipGroups.map(group => (
+                  <optgroup key={group.account} label={group.account} style={{ background: '#161b22', color: '#c9d1d9' }}>
+                    <option value={`account:${group.account}`} style={{ background: '#161b22', color: '#58a6ff' }}>
+                      All {group.account} ({group.sipUsers.length})
+                    </option>
+                    {group.sipUsers.map(s => (
+                      <option key={s} value={s} style={{ background: '#161b22', color: '#c9d1d9' }}>{s}</option>
+                    ))}
+                  </optgroup>
+                ))
+              ) : (
+                sipUsers.map(s => (
+                  <option key={s} value={s} style={{ background: '#161b22', color: '#c9d1d9' }}>{s}</option>
+                ))
+              )}
             </select>
           </span>
         )}

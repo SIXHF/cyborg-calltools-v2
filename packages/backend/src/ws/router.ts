@@ -14,7 +14,7 @@ import { resolvePermissions } from '../auth/permissions';
 import { dbQuery } from '../db/mysql';
 import { handleOriginateCall } from './handlers/originate';
 import { handleTransferCall } from './handlers/transfer';
-import { handleGetCdr } from './handlers/cdr';
+import { handleGetCdr, handleGetSipUsage } from './handlers/cdr';
 import { handleGetBalance, handleGetRefillHistory } from './handlers/billing';
 import { handleCnamLookup } from './handlers/cnam';
 import { handleStartListening as handleDtmfStart, handleStopListening as handleDtmfStop } from './handlers/dtmf';
@@ -147,6 +147,14 @@ export async function routeMessage(
       await handleTransferCall(ws, session, msg as any, send);
       break;
 
+    case 'get_sip_usage':
+      if (!session.permissions.cdr) {
+        send(ws, { type: 'error', message: 'CDR access not permitted.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleGetSipUsage(ws, session, msg as any, send);
+      break;
+
     case 'create_payment':
       if (!session.permissions.billing) {
         send(ws, { type: 'error', message: 'Billing access not permitted.', code: 'FORBIDDEN' });
@@ -277,6 +285,10 @@ export async function routeMessage(
       send(ws, { type: 'error', message: 'Audio approval not yet implemented.', code: 'NOT_IMPLEMENTED' });
       break;
 
+    case 'get_sip_info':
+      await handleGetSipInfo(ws, session, send);
+      break;
+
     default:
       send(ws, { type: 'error', message: `Unknown command: ${cmd}`, code: 'UNKNOWN_CMD' });
   }
@@ -373,4 +385,52 @@ async function handlePlayAudio(ws: ServerWebSocket<any>, session: SessionInfo, m
   }
   // TODO: Stream audio via AMI
   send(ws, { type: 'error', message: 'Audio playback not yet implemented.', code: 'NOT_IMPLEMENTED' });
+}
+
+async function handleGetSipInfo(ws: ServerWebSocket<any>, session: SessionInfo, send: SendFn) {
+  try {
+    const sipUser = session.sipUser;
+    const userId = session.userId;
+
+    // Query SIP extensions for this user (admin sees all, user sees own, sip_user sees own)
+    const rows = session.role === 'admin'
+      ? await dbQuery<{ name: string; callerid: string; host: string; allow: string; secret: string }>(
+          'SELECT s.name, s.callerid, s.host, s.allow, s.secret FROM pkg_sip s ORDER BY s.name'
+        )
+      : await dbQuery<{ name: string; callerid: string; host: string; allow: string; secret: string }>(
+          'SELECT s.name, s.callerid, s.host, s.allow, s.secret FROM pkg_sip s WHERE s.id_user = ? OR s.name = ?',
+          [userId ?? 0, sipUser ?? '']
+        );
+
+    const extensions = await Promise.all(
+      rows.map(async (row) => {
+        // Check registration status via Asterisk CLI
+        let registered = false;
+        try {
+          const proc = Bun.spawn(['asterisk', '-rx', `sip show peer ${row.name}`], {
+            stdout: 'pipe',
+            stderr: 'pipe',
+          });
+          const output = await new Response(proc.stdout).text();
+          registered = output.includes('OK');
+        } catch {
+          // If asterisk command fails, assume unregistered
+        }
+
+        return {
+          name: row.name,
+          callerid: row.callerid || '',
+          host: row.host || '',
+          codecs: row.allow || '',
+          secret: row.secret || '',
+          registered,
+        };
+      })
+    );
+
+    send(ws, { type: 'sip_info', extensions });
+  } catch (err) {
+    console.error('[WS] get_sip_info error:', err);
+    send(ws, { type: 'error', message: 'Failed to fetch SIP info.', code: 'INTERNAL_ERROR' });
+  }
 }
