@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useChannelStore } from '../stores/channelStore';
 import { useTranscriptStore } from '../stores/transcriptStore';
@@ -11,171 +11,175 @@ const RECONNECT_MAX_MS = 30_000;
 const PING_INTERVAL_MS = 30_000;
 
 let wsInstance: WebSocket | null = null;
+let reconnectAttempt = 0;
+let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+let pingTimer: ReturnType<typeof setInterval> | undefined;
 
-export function useWebSocket() {
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectAttempt = useRef(0);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const pingTimer = useRef<ReturnType<typeof setInterval>>(undefined);
+function handleMessage(event: MessageEvent) {
+  let msg: ServerMessage;
+  try {
+    msg = JSON.parse(event.data);
+  } catch {
+    console.error('[WS] Invalid JSON:', event.data);
+    return;
+  }
 
-  const auth = useAuthStore();
-  const channels = useChannelStore();
-  const transcript = useTranscriptStore();
-  const ui = useUiStore();
+  const auth = useAuthStore.getState();
+  const channels = useChannelStore.getState();
+  const transcript = useTranscriptStore.getState();
+  const ui = useUiStore.getState();
 
-  const handleMessage = useCallback((event: MessageEvent) => {
-    let msg: ServerMessage;
-    try {
-      msg = JSON.parse(event.data);
-    } catch {
-      console.error('[WS] Invalid JSON:', event.data);
-      return;
-    }
+  switch (msg.type) {
+    case 'auth_ok':
+      auth.login({
+        token: msg.token,
+        username: msg.username,
+        role: msg.role as any,
+        version: msg.version,
+        permissions: msg.permissions,
+        sipUsers: msg.sipUsers,
+      });
+      ui.addLogEntry('Authenticated successfully.');
+      ui.addToast('Logged in!', 'success', 2000);
+      break;
 
-    switch (msg.type) {
-      case 'auth_ok':
-        auth.login({
-          token: msg.token,
-          username: msg.username,
-          role: msg.role as any,
-          version: msg.version,
-          permissions: msg.permissions,
-          sipUsers: msg.sipUsers,
+    case 'auth_error':
+      ui.addToast(msg.message, 'error', 5000);
+      ui.addLogEntry(`Auth error: ${msg.message}`);
+      break;
+
+    case 'resume_ok':
+      auth.resume({ username: msg.username, role: msg.role as any });
+      ui.addLogEntry('Session resumed.');
+      break;
+
+    case 'resume_failed':
+      auth.logout();
+      ui.addToast('Session expired. Please log in again.', 'error');
+      break;
+
+    case 'channel_update':
+      channels.setChannels(msg.channels as any);
+      break;
+
+    case 'dtmf_digit':
+      ui.addLogEntry(`DTMF [${msg.channel}]: ${msg.digit} (${msg.direction})`);
+      break;
+
+    case 'transcript_start':
+      transcript.setActive(true);
+      ui.addLogEntry(`Transcript started for ${msg.channel}`);
+      break;
+
+    case 'transcript_update':
+      if (msg.isFinal) {
+        transcript.addSegment({
+          speaker: msg.speaker as 'caller' | 'callee',
+          text: msg.text,
+          timestamp: Date.now(),
+          isFinal: true,
         });
-        ui.addLogEntry('Authenticated successfully.');
-        break;
-
-      case 'auth_error':
-        ui.addToast(msg.message, 'error', 5000);
-        ui.addLogEntry(`Auth error: ${msg.message}`);
-        break;
-
-      case 'resume_ok':
-        auth.resume({ username: msg.username, role: msg.role as any });
-        ui.addLogEntry('Session resumed.');
-        break;
-
-      case 'resume_failed':
-        auth.logout();
-        ui.addToast('Session expired. Please log in again.', 'error');
-        break;
-
-      case 'channel_update':
-        channels.setChannels(msg.channels as any);
-        break;
-
-      case 'dtmf_digit':
-        ui.addLogEntry(`DTMF [${msg.channel}]: ${msg.digit} (${msg.direction})`);
-        break;
-
-      case 'transcript_start':
-        transcript.setActive(true);
-        ui.addLogEntry(`Transcript started for ${msg.channel}`);
-        break;
-
-      case 'transcript_update':
-        if (msg.isFinal) {
-          transcript.addSegment({
-            speaker: msg.speaker as 'caller' | 'callee',
-            text: msg.text,
-            timestamp: Date.now(),
-            isFinal: true,
-          });
-        } else {
-          transcript.updatePartial(msg.speaker as 'caller' | 'callee', msg.text);
-        }
-        break;
-
-      case 'transcript_done':
-        transcript.setActive(false);
-        ui.addLogEntry(`Transcript ended for ${msg.channel}`);
-        break;
-
-      case 'permissions_updated':
-        auth.updatePermissions(msg.permissions);
-        break;
-
-      case 'admin_broadcast':
-        ui.addToast(`[${msg.from}] ${msg.message}`, 'info', 10000);
-        break;
-
-      case 'error':
-        ui.addToast(msg.message, 'error');
-        ui.addLogEntry(`Error: ${msg.message}`);
-        break;
-
-      case 'pong':
-        // Heartbeat response
-        break;
-
-      default:
-        ui.addLogEntry(`Unhandled message: ${(msg as any).type}`);
-    }
-  }, [auth, channels, transcript, ui]);
-
-  const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) {
-      return;
-    }
-
-    const ws = new WebSocket(WS_URL);
-    wsRef.current = ws;
-    wsInstance = ws;
-
-    ws.onopen = () => {
-      reconnectAttempt.current = 0;
-      ui.setWsConnected(true);
-      ui.addLogEntry('Connected to server.');
-
-      // Try to resume session
-      const token = sessionStorage.getItem('ct2_session_token');
-      if (token) {
-        ws.send(JSON.stringify({ cmd: 'resume', token }));
+      } else {
+        transcript.updatePartial(msg.speaker as 'caller' | 'callee', msg.text);
       }
+      break;
 
-      // Start ping
-      pingTimer.current = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ cmd: 'ping' }));
-        }
-      }, PING_INTERVAL_MS);
-    };
+    case 'transcript_done':
+      transcript.setActive(false);
+      ui.addLogEntry(`Transcript ended for ${msg.channel}`);
+      break;
 
-    ws.onmessage = handleMessage;
+    case 'permissions_updated':
+      auth.updatePermissions(msg.permissions);
+      break;
 
-    ws.onclose = () => {
-      ui.setWsConnected(false);
-      ui.addLogEntry('Disconnected.');
-      if (pingTimer.current) clearInterval(pingTimer.current);
+    case 'admin_broadcast':
+      ui.addToast(`[${msg.from}] ${msg.message}`, 'info', 10000);
+      break;
 
-      // Exponential backoff reconnect
-      const delay = Math.min(
-        RECONNECT_BASE_MS * Math.pow(2, reconnectAttempt.current),
-        RECONNECT_MAX_MS
-      );
-      reconnectAttempt.current++;
-      ui.addLogEntry(`Reconnecting in ${(delay / 1000).toFixed(1)}s...`);
-      reconnectTimer.current = setTimeout(connect, delay);
-    };
+    case 'error':
+      ui.addToast(msg.message, 'error');
+      ui.addLogEntry(`Error: ${msg.message}`);
+      break;
 
-    ws.onerror = () => {
-      // Error triggers close, handled there
-    };
-  }, [handleMessage, ui]);
+    case 'pong':
+      break;
+
+    default:
+      ui.addLogEntry(`Unhandled message: ${(msg as any).type}`);
+  }
+}
+
+function connect() {
+  if (wsInstance?.readyState === WebSocket.OPEN || wsInstance?.readyState === WebSocket.CONNECTING) {
+    return;
+  }
+
+  const ui = useUiStore.getState();
+  const ws = new WebSocket(WS_URL);
+  wsInstance = ws;
+
+  ws.onopen = () => {
+    reconnectAttempt = 0;
+    ui.setWsConnected(true);
+    ui.addLogEntry('Connected to server.');
+
+    const token = sessionStorage.getItem('ct2_session_token');
+    if (token) {
+      ws.send(JSON.stringify({ cmd: 'resume', token }));
+    }
+
+    if (pingTimer) clearInterval(pingTimer);
+    pingTimer = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ cmd: 'ping' }));
+      }
+    }, PING_INTERVAL_MS);
+  };
+
+  ws.onmessage = handleMessage;
+
+  ws.onclose = () => {
+    ui.setWsConnected(false);
+    ui.addLogEntry('Disconnected.');
+    if (pingTimer) clearInterval(pingTimer);
+
+    const delay = Math.min(
+      RECONNECT_BASE_MS * Math.pow(2, reconnectAttempt),
+      RECONNECT_MAX_MS
+    );
+    reconnectAttempt++;
+    ui.addLogEntry(`Reconnecting in ${(delay / 1000).toFixed(1)}s...`);
+    reconnectTimer = setTimeout(connect, delay);
+  };
+
+  ws.onerror = () => {};
+}
+
+/** Hook to start the WebSocket connection once */
+export function useWebSocket() {
+  const started = useRef(false);
 
   useEffect(() => {
+    if (started.current) return;
+    started.current = true;
     connect();
+
     return () => {
-      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-      if (pingTimer.current) clearInterval(pingTimer.current);
-      wsRef.current?.close();
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (pingTimer) clearInterval(pingTimer);
+      wsInstance?.close();
+      wsInstance = null;
+      started.current = false;
     };
-  }, [connect]);
+  }, []);
 }
 
 /** Send a message to the WebSocket server */
 export function wsSend(msg: Record<string, unknown>) {
   if (wsInstance?.readyState === WebSocket.OPEN) {
     wsInstance.send(JSON.stringify(msg));
+  } else {
+    console.warn('[WS] Cannot send, not connected. readyState:', wsInstance?.readyState);
   }
 }

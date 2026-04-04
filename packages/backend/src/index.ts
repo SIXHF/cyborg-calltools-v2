@@ -79,11 +79,12 @@ const server = Bun.serve({
     idleTimeout: 120, // seconds
 
     open(ws: ServerWebSocket<WsData>) {
-      // Connection opened, waiting for auth
+      console.log(`[WS] Connection opened from ${ws.data.ip}`);
     },
 
     async message(ws: ServerWebSocket<WsData>, raw: string | Buffer) {
       const text = typeof raw === 'string' ? raw : raw.toString();
+      console.log(`[WS] Message from ${ws.data.ip}: ${text.slice(0, 200)}`);
 
       // Parse JSON
       let data: unknown;
