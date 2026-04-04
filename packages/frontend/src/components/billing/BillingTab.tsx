@@ -117,7 +117,7 @@ export function BillingTab() {
       <div className="glass-panel">
         <div className="panel-header">
           <h2>Account Balance</h2>
-          <button onClick={() => wsSend({ cmd: 'get_balance' })} className="btn btn-sm">Refresh</button>
+          <button onClick={() => wsSend({ cmd: 'get_balance', ...targetSipParam })} className="btn btn-sm">Refresh</button>
         </div>
         <div className="p-6 text-center">
           <div className="text-[28px] font-bold font-mono" style={{ color: balance !== null && balance < 1 ? '#f85149' : '#3fb950' }}>

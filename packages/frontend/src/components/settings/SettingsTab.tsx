@@ -185,7 +185,20 @@ interface MohFile {
 function MohPanel() {
   const { role, permissions } = useAuthStore();
   const globalSelectedSip = useAuthStore(s => s.selectedSipUser);
+  const sipGroups = useAuthStore(s => s.sipGroups);
+  const sipUsers = useAuthStore(s => s.sipUsers);
   const channels = useChannelStore(s => s.channels);
+
+  // Resolve account:prefix to actual SIP user for MOH commands
+  const resolvedSip = useMemo(() => {
+    if (!globalSelectedSip) return '';
+    if (globalSelectedSip.startsWith('account:')) {
+      const acct = globalSelectedSip.slice('account:'.length);
+      const group = sipGroups?.find(g => g.account === acct);
+      return group?.sipUsers?.[0] || sipUsers[0] || '';
+    }
+    return globalSelectedSip;
+  }, [globalSelectedSip, sipGroups, sipUsers]);
 
   const [mohInfo, setMohInfo] = useState<{ using_default: boolean; moh_class: string; files: MohFile[] } | null>(null);
   const [audioFiles, setAudioFiles] = useState<{ name: string }[]>([]);
@@ -196,18 +209,17 @@ function MohPanel() {
   const mohUpdated = useWsMessage<any>('moh_updated');
   const audioListMsg = useWsMessage<any>('audio_list');
 
-  const isNoSipSelected = (role === 'admin' || role === 'user') && !globalSelectedSip;
+  const isNoSipSelected = (role === 'admin' || role === 'user') && !resolvedSip;
   // V1 line 4686: disable controls during active call
   const inCall = channels.length > 0;
 
   // Fetch MOH info on mount and when SIP changes
   useEffect(() => {
-    if (!isNoSipSelected && globalSelectedSip) {
-      wsSend({ cmd: 'get_moh', targetSip: globalSelectedSip });
+    if (!isNoSipSelected && resolvedSip) {
+      wsSend({ cmd: 'get_moh', targetSip: resolvedSip });
     }
-    // Also fetch audio library for the dropdown
     wsSend({ cmd: 'list_audio' });
-  }, [globalSelectedSip, isNoSipSelected]);
+  }, [resolvedSip, isNoSipSelected]);
 
   useEffect(() => {
     if (mohMsg) setMohInfo({ using_default: mohMsg.using_default, moh_class: mohMsg.moh_class, files: mohMsg.files ?? [] });
@@ -224,18 +236,18 @@ function MohPanel() {
   }, [audioListMsg]);
 
   const handleSetFromAudio = () => {
-    if (!selectedAudio || !globalSelectedSip) return;
-    wsSend({ cmd: 'set_moh', targetSip: globalSelectedSip, filename: selectedAudio });
+    if (!selectedAudio || !resolvedSip) return;
+    wsSend({ cmd: 'set_moh', targetSip: resolvedSip, filename: selectedAudio });
   };
 
   const handleUseDefault = () => {
-    if (!globalSelectedSip) return;
-    wsSend({ cmd: 'set_moh', targetSip: globalSelectedSip, useDefault: true });
+    if (!resolvedSip) return;
+    wsSend({ cmd: 'set_moh', targetSip: resolvedSip, useDefault: true });
   };
 
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !globalSelectedSip) return;
+    if (!file || !resolvedSip) return;
     if (file.size > 10 * 1024 * 1024) {
       // V1 line 4715: max 10MB
       return;
@@ -243,16 +255,16 @@ function MohPanel() {
     const reader = new FileReader();
     reader.onload = () => {
       const base64 = (reader.result as string).split(',')[1];
-      wsSend({ cmd: 'upload_moh', targetSip: globalSelectedSip, filename: file.name, data: base64 });
+      wsSend({ cmd: 'upload_moh', targetSip: resolvedSip, filename: file.name, data: base64 });
     };
     reader.readAsDataURL(file);
     e.target.value = '';
   };
 
   const handleDelete = (filename: string) => {
-    if (!globalSelectedSip) return;
+    if (!resolvedSip) return;
     if (!confirm(`Remove ${filename} from hold music?`)) return;
-    wsSend({ cmd: 'delete_moh', targetSip: globalSelectedSip, filename });
+    wsSend({ cmd: 'delete_moh', targetSip: resolvedSip, filename });
   };
 
   const disabled = isNoSipSelected || inCall;

@@ -185,7 +185,20 @@ export async function handleGetCdr(
   const dateFrom = (msg.dateFrom ?? '').trim();
   const dateTo = (msg.dateTo ?? '').trim();
   const targetSip = msg.targetSip || session.selectedSipUser || undefined;
+  const targetAccount = msg.targetAccount || session.selectedAccount || undefined;
   const offset = (page - 1) * perPage;
+
+  // Resolve account to SIP users if needed
+  let accountSipUsers: string[] = [];
+  if (targetAccount) {
+    try {
+      const rows = await dbQuery<{ name: string }>(
+        'SELECT s.name FROM pkg_sip s JOIN pkg_user u ON s.id_user = u.id WHERE u.username = ?',
+        [targetAccount]
+      );
+      accountSipUsers = rows.map(r => r.name);
+    } catch {}
+  }
 
   // Build WHERE clause using parameterized queries
   const conditions: string[] = [];
@@ -211,6 +224,10 @@ export async function handleGetCdr(
     if (targetSip) {
       conditions.push('(src = ? OR calledstation LIKE ?)');
       params.push(targetSip, `%${targetSip}%`);
+    } else if (accountSipUsers.length > 0) {
+      const placeholders = accountSipUsers.map(() => 'src = ?').join(' OR ');
+      conditions.push(`(${placeholders})`);
+      params.push(...accountSipUsers);
     }
     // Admin with no filter sees all
   }

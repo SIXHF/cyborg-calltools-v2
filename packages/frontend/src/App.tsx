@@ -85,6 +85,9 @@ export function App() {
       {dtmfInfo && (
         <DtmfCaptureModal channel={dtmfInfo.channel} sipUser={dtmfInfo.sipUser} onClose={handleCloseDtmf} />
       )}
+      <footer className="text-center text-[11px] text-ct-muted-dark py-3" style={{ paddingBottom: 48 }}>
+        Created by L0Ki for Cyborg Telecom
+      </footer>
       <Toast />
       <EventLogDrawer />
     </div>

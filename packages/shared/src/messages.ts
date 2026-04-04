@@ -130,16 +130,21 @@ export const GetChannelsMessage = z.object({
 
 export const GetCdrMessage = z.object({
   cmd: z.literal('get_cdr'),
-  limit: z.number().int().min(1).max(100).default(50),
-  offset: z.number().int().min(0).default(0),
+  limit: z.number().int().min(1).max(100).optional(),
+  offset: z.number().int().min(0).optional(),
+  page: z.number().int().min(1).optional(),
+  perPage: z.number().int().min(1).max(50).optional(),
   search: z.string().optional(),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
   targetSip: z.string().optional(),
+  targetAccount: z.string().optional(),
 });
 
 export const GetBalanceMessage = z.object({
   cmd: z.literal('get_balance'),
+  targetSip: z.string().optional(),
+  targetAccount: z.string().optional(),
 });
 
 export const GetRefillHistoryMessage = z.object({
@@ -147,6 +152,8 @@ export const GetRefillHistoryMessage = z.object({
   page: z.number().int().min(1).optional(),
   perPage: z.number().int().min(1).max(100).optional(),
   filterUserId: z.number().optional(),
+  targetSip: z.string().optional(),
+  targetAccount: z.string().optional(),
 });
 
 export const CreatePaymentMessage = z.object({
