@@ -62,7 +62,7 @@ function StatsDashboard() {
         </div>
 
         {/* Stat Cards — V1 layout */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 p-4">
+        <div className="p-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
           {cards.map(c => (
             <div key={c.label} className="bg-ct-surface-solid border border-ct-border-solid rounded-[10px] p-3.5 text-center overflow-hidden">
               <div className="text-[28px] font-bold font-mono" style={{ color: c.color }}>{c.value}</div>

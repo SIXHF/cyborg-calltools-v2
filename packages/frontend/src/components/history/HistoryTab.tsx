@@ -108,7 +108,7 @@ function SipUsagePanel() {
             { label: 'Cost', value: `$${totals.cost.toFixed(2)}`, color: '#d29922' },
           ].map(c => (
             <div key={c.label} className="bg-ct-surface-solid border border-ct-border-solid rounded-[10px] p-3 text-center">
-              <div className="text-xl font-bold font-mono" style={{ color: c.color }}>{c.value}</div>
+              <div className="text-[28px] font-bold font-mono" style={{ color: c.color }}>{c.value}</div>
               <div className="text-[11px] text-ct-muted uppercase tracking-wider mt-1">{c.label}</div>
             </div>
           ))}
@@ -196,7 +196,7 @@ function CaptureHistoryPanel() {
     copyToClipboard(parts.join('\n'));
   };
 
-  if (captures.length === 0) return null;
+  // V1 always shows the panel, even when empty
 
   return (
     <div className="glass-panel">
@@ -207,6 +207,9 @@ function CaptureHistoryPanel() {
           <button onClick={clearAll} className="btn btn-sm btn-danger">Clear All</button>
         </div>
       </div>
+      {captures.length === 0 ? (
+        <div className="empty-state">No captures yet. Start listening to DTMF to capture data.</div>
+      ) : (
       <div className="space-y-0">
         {captures.map((c, i) => (
           <div key={c.timestamp + '-' + i} className="p-4 border-b border-ct-border-solid/50 last:border-b-0">
@@ -264,6 +267,7 @@ function CaptureHistoryPanel() {
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 }
@@ -354,9 +358,9 @@ export function HistoryTab() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Time</th>
-                  <th>Source</th>
-                  <th>Destination</th>
+                  <th>Date</th>
+                  <th>From</th>
+                  <th>To</th>
                   <th>Duration</th>
                   <th>Status</th>
                   <th>Cost</th>
@@ -372,7 +376,9 @@ export function HistoryTab() {
                     <td className="font-mono text-xs">{r.destination}</td>
                     <td className="font-mono text-xs">{formatDuration(r.duration)}</td>
                     <td>
-                      <span className={`tag ${statusBadge(r.status)}`}>{r.status.toUpperCase()}</span>
+                      <span className={r.status === 'answered' ? 'text-ct-green' : r.status === 'busy' ? 'text-ct-yellow' : 'text-ct-red'}>
+                        {r.status === 'answered' ? 'ANSWERED' : r.status === 'busy' ? 'BUSY' : r.status === 'noanswer' ? 'NO ANSWER' : 'FAILED'}
+                      </span>
                     </td>
                     <td className="font-mono text-xs text-ct-yellow">
                       {r.cost > 0 ? `$${r.cost.toFixed(2)}` : '-'}

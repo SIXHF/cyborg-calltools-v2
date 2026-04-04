@@ -50,7 +50,7 @@ export function EventLogDrawer() {
         style={{ maxHeight: 170 }}
       >
         {eventLog.length === 0 ? (
-          <div className="text-ct-muted-dark py-2">No events yet.</div>
+          <div className="text-ct-muted-dark py-2">[--:--:--] Waiting for connection...</div>
         ) : (
           eventLog.map((entry, i) => (
             <div key={i} className="py-0.5">

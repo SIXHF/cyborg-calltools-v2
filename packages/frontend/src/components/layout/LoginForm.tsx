@@ -97,7 +97,7 @@ export function LoginForm() {
       </div>
 
       <div
-        className="w-full max-w-[400px]"
+        className="w-full max-w-[380px]"
         style={{
           background: 'rgba(22, 27, 34, 0.85)',
           backdropFilter: 'blur(16px)',
@@ -129,7 +129,7 @@ export function LoginForm() {
           </button>
         </div>
 
-        <div className="p-8">
+        <div className="p-10">
           {/* ── Login Pane ── */}
           {tab === 'login' && (
             <form onSubmit={handleLogin} className="space-y-4">
