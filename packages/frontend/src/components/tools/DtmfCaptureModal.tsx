@@ -48,18 +48,7 @@ export function DtmfCaptureModal({ channel, sipUser, onClose }: DtmfCaptureModal
   const dtmfMsg = useWsMessage<any>('dtmf_digit');
   const dtmfDone = useWsMessage<any>('dtmf_done');
   const prevDigitRef = useRef<any>(null);
-
-  // Handle incoming DTMF digits
-  useEffect(() => {
-    if (!dtmfMsg || dtmfMsg === prevDigitRef.current) return;
-    prevDigitRef.current = dtmfMsg;
-    handleDigit(dtmfMsg.digit);
-  }, [dtmfMsg]);
-
-  // Handle DTMF done (hangup or manual stop)
-  useEffect(() => {
-    if (dtmfDone) onClose();
-  }, [dtmfDone]);
+  const handleDigitRef = useRef<(d: string) => void>(() => {});
 
   const handleDigit = useCallback((digit: string) => {
     setRawDigits(prev => [...prev, digit]);
@@ -141,6 +130,19 @@ export function DtmfCaptureModal({ channel, sipUser, onClose }: DtmfCaptureModal
       }
     } catch {}
   };
+
+  // Keep ref current and wire up effects AFTER handleDigit is defined
+  useEffect(() => { handleDigitRef.current = handleDigit; }, [handleDigit]);
+
+  useEffect(() => {
+    if (!dtmfMsg || dtmfMsg === prevDigitRef.current) return;
+    prevDigitRef.current = dtmfMsg;
+    handleDigitRef.current(dtmfMsg.digit);
+  }, [dtmfMsg]);
+
+  useEffect(() => {
+    if (dtmfDone && dtmfDone.channel === channel) onClose();
+  }, [dtmfDone, channel, onClose]);
 
   const stopListening = () => {
     wsSend({ cmd: 'stop_listening', channel });

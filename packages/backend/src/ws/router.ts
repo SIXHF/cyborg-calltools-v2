@@ -119,6 +119,10 @@ export async function routeMessage(
       break;
 
     case 'originate_call':
+      if (!session.permissions.quick_dial) {
+        send(ws, { type: 'error', message: 'Quick dial not permitted.', code: 'FORBIDDEN' });
+        return;
+      }
       await handleOriginateCall(ws, session, msg as any, send);
       break;
 

@@ -101,35 +101,29 @@ export async function enrichChannels(
     await Promise.allSettled(lookups);
   }
 
-  // Lookup fraud for caller numbers only
+  // Lookup fraud for caller numbers only (parallel)
   if (canFraud) {
-    const callerNums = channels
-      .filter(ch => ch.callerNum)
-      .map(ch => normalize(ch.callerNum))
-      .filter(n => n.length >= 10);
+    const callerNums = [...new Set(
+      channels.filter(ch => ch.callerNum).map(ch => normalize(ch.callerNum)).filter(n => n.length >= 10)
+    )];
 
-    for (const num of callerNums) {
+    const fraudLookups = callerNums.map(async (num) => {
       const cached = fraudCache.get(num);
       if (cached && (now - cached.ts) < FRAUD_CACHE_TTL) {
         if (!cnamMap[num]) cnamMap[num] = {};
         cnamMap[num].fraud_score = cached.score;
-        continue;
+        return;
       }
-
-      if (inFlightFraud.has(num)) continue;
+      if (inFlightFraud.has(num)) return;
       inFlightFraud.add(num);
-
       try {
         const result = await checkFraud(num);
         fraudCache.set(num, { score: result.score, ts: now });
         if (!cnamMap[num]) cnamMap[num] = {};
         cnamMap[num].fraud_score = result.score;
-      } catch {
-        // Skip
-      } finally {
-        inFlightFraud.delete(num);
-      }
-    }
+      } catch {} finally { inFlightFraud.delete(num); }
+    });
+    await Promise.allSettled(fraudLookups);
   }
 
   // Only send if we have data

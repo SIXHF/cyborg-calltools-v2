@@ -17,6 +17,7 @@ export function BillingTab() {
   const [page, setPage] = useState(1);
   const [rechargeAmt, setRechargeAmt] = useState('');
   const [rechargeStatus, setRechargeStatus] = useState('');
+  const [rechargeUrl, setRechargeUrl] = useState('');
   const [rechargeLoading, setRechargeLoading] = useState(false);
 
   const balanceMsg = useWsMessage<any>('billing_update');
@@ -42,12 +43,9 @@ export function BillingTab() {
       setRechargeLoading(false);
       const url = paymentMsg.payment_url;
       if (url) {
+        setRechargeUrl(url);
         const win = window.open(url, '_blank');
-        if (!win) {
-          setRechargeStatus(`<a href="${url}" target="_blank" rel="noopener" class="text-ct-accent underline font-bold">Click here to open the payment page</a>`);
-        } else {
-          setRechargeStatus('Invoice created! Payment page opened. Watching for payment...');
-        }
+        setRechargeStatus(win ? 'Invoice created! Payment page opened. Watching for payment...' : 'Invoice created! Click the link below to pay.');
       }
       // Start polling balance every 15s for up to 1 hour
       if (pollRef.current) clearInterval(pollRef.current);
@@ -127,11 +125,14 @@ export function BillingTab() {
             </button>
           </div>
           {rechargeStatus && (
-            <div
-              className="text-[13px]"
-              style={{ color: rechargeStatus.includes('Error') ? '#f85149' : rechargeStatus.includes('invoice') ? '#d29922' : '#3fb950' }}
-              dangerouslySetInnerHTML={{ __html: rechargeStatus }}
-            />
+            <div className="text-[13px]" style={{ color: rechargeStatus.includes('Error') ? '#f85149' : rechargeStatus.includes('invoice') ? '#d29922' : '#3fb950' }}>
+              {rechargeStatus}
+            </div>
+          )}
+          {rechargeUrl && (
+            <a href={rechargeUrl} target="_blank" rel="noopener noreferrer" className="text-ct-accent underline font-bold text-sm">
+              Click here to open the payment page
+            </a>
           )}
           <div className="text-[11px] text-ct-muted-dark">0.4% processing fee may apply. Invoice valid for 1 hour.</div>
         </div>
