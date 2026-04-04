@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuthStore } from '../../stores/authStore';
+import { useChannelStore } from '../../stores/channelStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { useWsMessage } from '../../hooks/useWsMessage';
 import { getNotifSettings, saveNotifSettings } from '../../utils/audio';
@@ -140,11 +141,216 @@ export function SettingsTab() {
         </div>
       </div>
 
+      {/* Hold Music — gated by moh permission */}
+      {(role === 'admin' || permissions.moh !== false) && <MohPanel />}
+
       {/* SIP Account Info — hidden for admin (V1 line 3298) */}
       {role !== 'admin' && <SipAccountInfo />}
 
       {/* Notification Preferences — persisted to localStorage */}
       <NotificationSettings />
+    </div>
+  );
+}
+
+// ── Hold Music Panel (V1 lines 1438-1469, 4633-4733) ──
+
+interface MohFile {
+  name: string;
+  size: number;
+}
+
+function MohPanel() {
+  const { role, permissions } = useAuthStore();
+  const globalSelectedSip = useAuthStore(s => s.selectedSipUser);
+  const channels = useChannelStore(s => s.channels);
+
+  const [mohInfo, setMohInfo] = useState<{ using_default: boolean; moh_class: string; files: MohFile[] } | null>(null);
+  const [audioFiles, setAudioFiles] = useState<{ name: string }[]>([]);
+  const [selectedAudio, setSelectedAudio] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const mohMsg = useWsMessage<any>('moh_info');
+  const mohUpdated = useWsMessage<any>('moh_updated');
+  const audioListMsg = useWsMessage<any>('audio_list');
+
+  const isNoSipSelected = (role === 'admin' || role === 'user') && !globalSelectedSip;
+  // V1 line 4686: disable controls during active call
+  const inCall = channels.length > 0;
+
+  // Fetch MOH info on mount and when SIP changes
+  useEffect(() => {
+    if (!isNoSipSelected && globalSelectedSip) {
+      wsSend({ cmd: 'get_moh', targetSip: globalSelectedSip });
+    }
+    // Also fetch audio library for the dropdown
+    wsSend({ cmd: 'list_audio' });
+  }, [globalSelectedSip, isNoSipSelected]);
+
+  useEffect(() => {
+    if (mohMsg) setMohInfo({ using_default: mohMsg.using_default, moh_class: mohMsg.moh_class, files: mohMsg.files ?? [] });
+  }, [mohMsg]);
+
+  useEffect(() => {
+    if (mohUpdated) setMohInfo({ using_default: mohUpdated.using_default, moh_class: mohUpdated.moh_class, files: mohUpdated.files ?? [] });
+  }, [mohUpdated]);
+
+  useEffect(() => {
+    if (audioListMsg) {
+      setAudioFiles((audioListMsg.files ?? []).filter((f: any) => f.status === 'approved' || f.status === undefined));
+    }
+  }, [audioListMsg]);
+
+  const handleSetFromAudio = () => {
+    if (!selectedAudio || !globalSelectedSip) return;
+    wsSend({ cmd: 'set_moh', targetSip: globalSelectedSip, filename: selectedAudio });
+  };
+
+  const handleUseDefault = () => {
+    if (!globalSelectedSip) return;
+    wsSend({ cmd: 'set_moh', targetSip: globalSelectedSip, useDefault: true });
+  };
+
+  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !globalSelectedSip) return;
+    if (file.size > 10 * 1024 * 1024) {
+      // V1 line 4715: max 10MB
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = (reader.result as string).split(',')[1];
+      wsSend({ cmd: 'upload_moh', targetSip: globalSelectedSip, filename: file.name, data: base64 });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleDelete = (filename: string) => {
+    if (!globalSelectedSip) return;
+    if (!confirm(`Remove ${filename} from hold music?`)) return;
+    wsSend({ cmd: 'delete_moh', targetSip: globalSelectedSip, filename });
+  };
+
+  const disabled = isNoSipSelected || inCall;
+
+  return (
+    <div className="glass-panel">
+      <div className="panel-header">
+        <h2>Hold Music</h2>
+        <span className="text-[11px]">
+          {isNoSipSelected ? (
+            <span style={{ color: '#d29922' }}>Select a SIP user</span>
+          ) : mohInfo?.using_default ? (
+            <span style={{ color: '#3fb950' }}>Using default</span>
+          ) : mohInfo ? (
+            <span style={{ color: '#da6d28' }}>Custom: {mohInfo.moh_class}</span>
+          ) : null}
+        </span>
+      </div>
+      <div className="p-4 space-y-3">
+        {/* Current info */}
+        <div className="text-[13px] text-ct-muted">
+          {isNoSipSelected
+            ? 'Select a specific SIP user to manage hold music.'
+            : !mohInfo
+              ? 'Loading...'
+              : mohInfo.using_default
+                ? `Using the system default hold music (${mohInfo.files.length} tracks).`
+                : `Custom hold music (${mohInfo.files.length} file${mohInfo.files.length !== 1 ? 's' : ''}):`
+          }
+        </div>
+
+        {/* File list (custom only) */}
+        {mohInfo && !mohInfo.using_default && mohInfo.files.length > 0 && (
+          <div className="space-y-1">
+            {mohInfo.files.map(f => (
+              <div key={f.name} className="flex items-center justify-between py-1.5 px-2 rounded bg-ct-surface-solid border border-ct-border-solid/50">
+                <span className="text-[13px] text-ct-text-secondary font-mono">{f.name}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-ct-muted">{Math.round(f.size / 1024)} KB</span>
+                  <button
+                    className="text-[11px] px-2 py-0.5 rounded text-ct-red hover:bg-ct-red-bg transition-colors"
+                    onClick={() => handleDelete(f.name)}
+                    disabled={disabled}
+                    style={disabled ? { opacity: 0.4 } : {}}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Set from audio library */}
+        <div className="flex gap-2.5 items-center flex-wrap">
+          <label className="text-[12px] text-ct-muted">Set from audio library:</label>
+          <select
+            value={selectedAudio}
+            onChange={e => setSelectedAudio(e.target.value)}
+            className="form-input flex-1 min-w-0 !py-1.5 !px-2.5 !text-[13px]"
+            disabled={disabled}
+            style={disabled ? { opacity: 0.4 } : {}}
+          >
+            <option value="">-- Select from audio library --</option>
+            {audioFiles.map(f => (
+              <option key={f.name} value={f.name}>{f.name}</option>
+            ))}
+          </select>
+          <button
+            onClick={handleSetFromAudio}
+            disabled={disabled || !selectedAudio}
+            className="btn btn-sm btn-success"
+            style={disabled ? { opacity: 0.4 } : {}}
+          >
+            Set as Hold Music
+          </button>
+        </div>
+
+        {/* Upload / Use Default row */}
+        <div className="flex gap-2.5 items-center flex-wrap">
+          <label
+            className="btn btn-sm cursor-pointer"
+            style={disabled ? { opacity: 0.4, pointerEvents: 'none' } : {}}
+          >
+            Upload New
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".mp3,.wav,.ogg,.m4a,.flac"
+              className="hidden"
+              onChange={handleUpload}
+              disabled={disabled}
+            />
+          </label>
+          <button
+            onClick={handleUseDefault}
+            disabled={disabled}
+            className="btn btn-sm"
+            style={disabled ? { opacity: 0.4 } : {}}
+          >
+            Use Default
+          </button>
+        </div>
+      </div>
+
+      {/* Active call warning — V1 line 4462 */}
+      {inCall && !isNoSipSelected && (
+        <div
+          className="px-4 py-2 text-[12px]"
+          style={{ background: '#2d1b00', borderTop: '1px solid #da6d28', color: '#da6d28' }}
+        >
+          Cannot change hold music during an active call. Changes only take effect on the next call.
+        </div>
+      )}
+
+      {/* Footer meta — V1 line 4465-4468 */}
+      <div className="px-4 py-2.5 border-t border-ct-border-solid/50 space-y-0.5">
+        <div className="text-[11px] text-ct-muted-dark">Changes hold music for your SIP extension only</div>
+        <div className="text-[11px] text-ct-muted-dark">Changes take effect on the next call, not the current one</div>
+      </div>
     </div>
   );
 }

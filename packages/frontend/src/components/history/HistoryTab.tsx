@@ -41,6 +41,22 @@ function formatDuration(seconds: number): string {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
+/** V1 line 4775: Convert server time (PKT UTC+5) to user's local timezone */
+function formatCdrDate(startTime: string): string {
+  try {
+    const d = new Date(startTime.replace(' ', 'T') + '+05:00');
+    if (!isNaN(d.getTime())) {
+      return d.getFullYear() + '-' +
+        String(d.getMonth() + 1).padStart(2, '0') + '-' +
+        String(d.getDate()).padStart(2, '0') + ' ' +
+        String(d.getHours()).padStart(2, '0') + ':' +
+        String(d.getMinutes()).padStart(2, '0') + ':' +
+        String(d.getSeconds()).padStart(2, '0');
+    }
+  } catch { /* fall through */ }
+  return startTime;
+}
+
 function statusBadge(status: string) {
   switch (status) {
     case 'answered': return 'tag-up';
@@ -372,7 +388,7 @@ export function HistoryTab() {
                 {records.map(r => (
                   <tr key={r.id}>
                     <td className="text-ct-muted text-xs whitespace-nowrap">
-                      {new Date(r.startTime).toLocaleString()}
+                      {formatCdrDate(r.startTime)}
                     </td>
                     <td className="font-mono text-xs">{r.src}</td>
                     <td className="font-mono text-xs">{r.destination}</td>

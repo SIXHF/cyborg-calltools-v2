@@ -120,6 +120,7 @@ export const GetRefillHistoryMessage = z.object({
   cmd: z.literal('get_refill_history'),
   page: z.number().int().min(1).default(1),
   perPage: z.number().int().min(1).max(50).default(25),
+  filterUserId: z.number().int().optional(),
 });
 
 export const GetUsersOverviewMessage = z.object({

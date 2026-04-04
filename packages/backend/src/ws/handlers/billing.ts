@@ -70,13 +70,18 @@ export async function handleGetRefillHistory(
   const offset = (page - 1) * perPage;
 
   try {
-    // V1 line 5831-5836: admin with no filter sees ALL refills
+    // V1 line 4998-5001: admin can filter by user ID via dropdown
     const targetSip = msg.targetSip || session.selectedSipUser;
+    const filterUserId = msg.filterUserId;
 
     let whereClause = '';
     let whereParams: any[] = [];
 
-    if (session.role === 'admin' && !targetSip) {
+    if (session.role === 'admin' && filterUserId) {
+      // Admin filtering by specific user ID (V1: refillUserFilter dropdown)
+      whereClause = 'id_user = ?';
+      whereParams = [filterUserId];
+    } else if (session.role === 'admin' && !targetSip) {
       // Admin with "All" selected — show ALL refills (V1: where = "1=1")
       whereClause = '1=1';
     } else {

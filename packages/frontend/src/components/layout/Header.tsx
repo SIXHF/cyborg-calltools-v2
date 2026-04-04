@@ -62,16 +62,24 @@ export function Header() {
             >
               <option value="" style={{ background: '#161b22', color: '#c9d1d9' }}>All</option>
               {sipGroups && sipGroups.length > 0 ? (
-                sipGroups.map(group => (
-                  <optgroup key={group.account} label={group.account} style={{ background: '#161b22', color: '#c9d1d9' }}>
-                    <option value={`account:${group.account}`} style={{ background: '#161b22', color: '#58a6ff' }}>
-                      All {group.account} ({group.sipUsers.length})
-                    </option>
-                    {group.sipUsers.map(s => (
-                      <option key={s} value={s} style={{ background: '#161b22', color: '#c9d1d9' }}>{s}</option>
+                <>
+                  {/* V1 line 3239-3248: "Accounts" optgroup with account-level entries */}
+                  <optgroup label="Accounts" style={{ background: '#161b22', color: '#c9d1d9' }}>
+                    {sipGroups.map(group => (
+                      <option key={`acct-${group.account}`} value={`account:${group.account}`} style={{ background: '#161b22', color: '#c9d1d9' }}>
+                        {group.account} ({group.sipUsers.length} SIPs)
+                      </option>
                     ))}
                   </optgroup>
-                ))
+                  {/* V1 line 3250-3261: per-account optgroups with individual SIP users */}
+                  {sipGroups.map(group => (
+                    <optgroup key={group.account} label={group.account} style={{ background: '#161b22', color: '#c9d1d9' }}>
+                      {group.sipUsers.map(s => (
+                        <option key={s} value={s} style={{ background: '#161b22', color: '#c9d1d9' }}>{s}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </>
               ) : (
                 sipUsers.map(s => (
                   <option key={s} value={s} style={{ background: '#161b22', color: '#c9d1d9' }}>{s}</option>

@@ -29,11 +29,26 @@ export function BillingTab() {
 
   const selectedSip = useAuthStore(s => s.selectedSipUser);
 
+  // Admin user filter for refill history (V1 line 1572-1576)
+  const [filterUserId, setFilterUserId] = useState<number | undefined>(undefined);
+  const [userList, setUserList] = useState<{ id: number; username: string; credit: number }[]>([]);
+  const usersMsg = useWsMessage<any>('users_overview');
+
   // Re-fetch when SIP user changes
   useEffect(() => {
     wsSend({ cmd: 'get_balance' });
     wsSend({ cmd: 'get_refill_history', page: 1, perPage: 25 });
-  }, [selectedSip]);
+    // Admin: fetch user list for filter dropdown (V1 line 5154)
+    if (role === 'admin') {
+      wsSend({ cmd: 'get_users_overview' });
+    }
+  }, [selectedSip, role]);
+
+  useEffect(() => {
+    if (usersMsg?.users) {
+      setUserList(usersMsg.users.map((u: any) => ({ id: u.id, username: u.username, credit: parseFloat(u.credit ?? 0) })));
+    }
+  }, [usersMsg]);
 
   useEffect(() => { if (balanceMsg) setBalance(balanceMsg.balance); }, [balanceMsg]);
   useEffect(() => {
@@ -74,9 +89,10 @@ export function BillingTab() {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
 
-  const loadPage = (p: number) => {
+  const loadPage = (p: number, overrideFilterUserId?: number | undefined) => {
     setPage(p);
-    wsSend({ cmd: 'get_refill_history', page: p, perPage: 25 });
+    const fuid = overrideFilterUserId !== undefined ? overrideFilterUserId : filterUserId;
+    wsSend({ cmd: 'get_refill_history', page: p, perPage: 25, ...(fuid ? { filterUserId: fuid } : {}) });
   };
 
   const handleRecharge = () => {
@@ -154,6 +170,27 @@ export function BillingTab() {
           <h2>Refill History</h2>
           <span className="text-ct-muted text-xs">{totalRefills} total</span>
         </div>
+        {/* V1 line 1572-1576: Admin user filter dropdown */}
+        {role === 'admin' && (
+          <div className="flex gap-2 px-4 py-2 border-b border-ct-border-solid items-center">
+            <select
+              value={filterUserId ?? ''}
+              onChange={e => {
+                const val = e.target.value ? parseInt(e.target.value) : undefined;
+                setFilterUserId(val);
+                setPage(1);
+                loadPage(1, val);
+              }}
+              className="form-input !py-1.5 !px-2.5 !text-xs"
+              style={{ minWidth: 160 }}
+            >
+              <option value="">All Users</option>
+              {userList.map(u => (
+                <option key={u.id} value={u.id}>{u.username}</option>
+              ))}
+            </select>
+          </div>
+        )}
         {refills.length === 0 ? (
           <div className="empty-state">No refill records found.</div>
         ) : (

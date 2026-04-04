@@ -1,7 +1,10 @@
 import type { ServerWebSocket } from 'bun';
 import type { ServerMessage, ClientMessageType } from '@calltools/shared';
+import { readFile, writeFile, rename, unlink } from 'fs/promises';
+import { join } from 'path';
 import { auditLog } from '../audit/logger';
 import { destroySession } from '../auth/session';
+import { invalidatePermissionCache } from '../auth/permissions';
 import { checkRateLimit } from './middleware';
 import {
   getActiveChannels,
@@ -340,7 +343,7 @@ export async function routeMessage(
         send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' });
         return;
       }
-      send(ws, { type: 'error', message: 'Audio approval not yet implemented.', code: 'NOT_IMPLEMENTED' });
+      await handleAdminAudioApproval(ws, session, msg as any, send);
       break;
 
     case 'get_sip_info':
@@ -482,5 +485,84 @@ async function handleGetSipInfo(ws: ServerWebSocket<any>, session: SessionInfo, 
   } catch (err) {
     console.error('[WS] get_sip_info error:', err);
     send(ws, { type: 'error', message: 'Failed to fetch SIP info.', code: 'INTERNAL_ERROR' });
+  }
+}
+
+const AUDIO_DIR = '/opt/calltools-audio';
+const AUDIO_PENDING_DIR = '/opt/calltools-audio/pending';
+const PERMISSIONS_FILE = process.env.PERMISSIONS_FILE ?? '/opt/calltools-v2-permissions.json';
+
+async function handleAdminAudioApproval(
+  ws: ServerWebSocket<any>,
+  session: SessionInfo,
+  msg: { cmd: string; filename: string; action: 'approve' | 'reject' },
+  send: SendFn
+): Promise<void> {
+  const { filename, action } = msg;
+
+  if (!filename || filename.includes('..') || filename.includes('/')) {
+    send(ws, { type: 'error', message: 'Invalid filename.', code: 'INVALID_INPUT' });
+    return;
+  }
+
+  const pendingPath = join(AUDIO_PENDING_DIR, filename);
+
+  try {
+    // Verify file exists in pending directory
+    const file = Bun.file(pendingPath);
+    if (!(await file.exists())) {
+      send(ws, { type: 'error', message: 'Pending file not found.', code: 'NOT_FOUND' });
+      return;
+    }
+
+    if (action === 'approve') {
+      // Move file from pending/ to main audio dir
+      const destPath = join(AUDIO_DIR, filename);
+      await rename(pendingPath, destPath);
+
+      // Update permissions JSON: remove from pending, add to approved
+      let config: any = {};
+      try { config = JSON.parse(await readFile(PERMISSIONS_FILE, 'utf-8')); } catch {}
+      if (!config.audio_approvals) config.audio_approvals = { pending: [], approved: [] };
+
+      // Remove from pending metadata
+      config.audio_approvals.pending = (config.audio_approvals.pending ?? []).filter(
+        (p: any) => (typeof p === 'string' ? p : p?.filename) !== filename
+      );
+      // Add to approved list
+      if (!config.audio_approvals.approved.includes(filename)) {
+        config.audio_approvals.approved.push(filename);
+      }
+
+      await writeFile(PERMISSIONS_FILE, JSON.stringify(config, null, 2));
+      invalidatePermissionCache();
+
+      auditLog(session.username, session.role, session.ip, 'approve_audio', filename);
+      console.log(`[Audio] Admin ${session.username} approved: ${filename}`);
+
+      send(ws, { type: 'audio_uploaded', name: filename, status: 'approved', files: [] });
+    } else {
+      // Reject: delete the pending file
+      await unlink(pendingPath);
+
+      // Remove from pending metadata in permissions
+      let config: any = {};
+      try { config = JSON.parse(await readFile(PERMISSIONS_FILE, 'utf-8')); } catch {}
+      if (config.audio_approvals?.pending) {
+        config.audio_approvals.pending = config.audio_approvals.pending.filter(
+          (p: any) => (typeof p === 'string' ? p : p?.filename) !== filename
+        );
+        await writeFile(PERMISSIONS_FILE, JSON.stringify(config, null, 2));
+        invalidatePermissionCache();
+      }
+
+      auditLog(session.username, session.role, session.ip, 'reject_audio', filename);
+      console.log(`[Audio] Admin ${session.username} rejected: ${filename}`);
+
+      send(ws, { type: 'audio_deleted', name: filename, files: [] });
+    }
+  } catch (err) {
+    console.error('[Audio] Approval error:', err);
+    send(ws, { type: 'error', message: `Audio ${action} failed: ${err}`, code: 'INTERNAL_ERROR' });
   }
 }

@@ -104,23 +104,31 @@ function StatsDashboard() {
           </div>
         )}
 
-        {/* ASR by Trunk */}
+        {/* ASR by Trunk — V1 line 5449: colored progress bars */}
         {stats.asr_by_trunk?.length > 0 && (
           <div className="px-4 pb-4">
             <h3 className="text-xs font-semibold text-ct-muted uppercase tracking-wider mb-2">ASR by Trunk</h3>
-            <table className="data-table">
-              <thead><tr><th>Trunk</th><th>Total</th><th>Answered</th><th>ASR</th></tr></thead>
-              <tbody>
-                {stats.asr_by_trunk.map((t: any) => (
-                  <tr key={t.trunk_id}>
-                    <td className="font-mono text-ct-accent">{t.trunk_name}</td>
-                    <td className="font-mono">{t.total}</td>
-                    <td className="font-mono text-ct-green">{t.answered}</td>
-                    <td><span className={`tag ${t.asr >= 50 ? 'tag-up' : t.asr >= 25 ? 'tag-ring' : 'tag-down'}`}>{t.asr}%</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="space-y-1.5">
+              {stats.asr_by_trunk.map((t: any) => {
+                const color = t.asr >= 50 ? '#3fb950' : t.asr >= 25 ? '#d29922' : '#f85149';
+                return (
+                  <div key={t.trunk_id} className="flex items-center gap-2" style={{ marginBottom: 6 }}>
+                    <span className="font-mono text-[12px] text-ct-muted" style={{ minWidth: 100 }}>
+                      {t.trunk_name || `Trunk ${t.trunk_id}`}
+                    </span>
+                    <div className="flex-1 h-4 rounded overflow-hidden" style={{ background: '#21262d' }}>
+                      <div
+                        className="h-full rounded"
+                        style={{ width: `${t.asr}%`, background: color }}
+                      />
+                    </div>
+                    <span className="font-mono text-[11px] text-ct-text-secondary text-right" style={{ minWidth: 70 }}>
+                      {t.asr}% ({t.answered}/{t.total})
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
