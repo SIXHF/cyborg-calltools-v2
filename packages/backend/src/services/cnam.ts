@@ -60,7 +60,7 @@ export async function lookupCnam(phoneNumber: string): Promise<CnamLookupResult>
     const name = genericNames.has(rawCnam.toUpperCase().trim()) ? '' : rawCnam;
 
     return {
-      name: name || 'Unknown',
+      name: name || '',
       carrier: rawCarrier,
       type: carrierType,
       state: d.portability?.state,

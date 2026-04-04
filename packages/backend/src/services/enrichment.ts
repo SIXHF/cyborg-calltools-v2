@@ -203,6 +203,15 @@ export async function enrichChannels(
       } catch {} finally { inFlightFraud.delete(num); }
     });
     await Promise.allSettled(fraudLookups);
+
+    // Save fraud cache to disk
+    try {
+      const obj: Record<string, any> = {};
+      for (const [num, entry] of fraudCache) {
+        obj[num] = { fraud_score: entry.score, name: entry.name || '' };
+      }
+      await writeFile(FRAUD_CACHE_FILE, JSON.stringify(obj));
+    } catch {}
   }
 
   // Only send if we have data

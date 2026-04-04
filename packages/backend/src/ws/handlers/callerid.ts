@@ -26,13 +26,20 @@ export async function handleGetCallerId(
   send: SendFn
 ) {
   const targetUser = msg.sipUser || session.sipUser || session.username;
+
+  // Ownership check: non-admin can only read their own SIP users
+  const sipUsers = session.sipUsers ?? (session.sipUser ? [session.sipUser] : []);
+  if (session.role !== 'admin' && !sipUsers.includes(targetUser)) {
+    send(ws, { type: 'error', message: 'Access denied.', code: 'FORBIDDEN' });
+    return;
+  }
+
   try {
     const rows = await dbQuery<{ callerid: string }>(
       'SELECT callerid FROM pkg_sip WHERE name = ? LIMIT 1',
       [targetUser]
     );
     const callerid = rows.length > 0 ? (rows[0].callerid || '') : '';
-    // Use callerid_info type (not callerid_updated which triggers toast)
     send(ws, { type: 'callerid_info', sipUser: targetUser, callerid });
   } catch {
     send(ws, { type: 'error', message: 'Failed to get caller ID.', code: 'DB_ERROR' });

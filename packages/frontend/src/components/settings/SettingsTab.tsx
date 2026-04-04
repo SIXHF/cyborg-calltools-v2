@@ -101,7 +101,7 @@ export function SettingsTab() {
                   />
                   <button
                     onClick={handleSetCallerid}
-                    disabled={saving || !callerid.trim()}
+                    disabled={saving || !callerid.trim() || showTollFreeWarning}
                     className="btn btn-primary"
                   >
                     {saving ? 'Saving...' : 'Set Caller ID'}

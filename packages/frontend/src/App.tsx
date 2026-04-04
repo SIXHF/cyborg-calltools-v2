@@ -29,9 +29,8 @@ export function App() {
       const msg = (e as CustomEvent).detail;
       if (msg?.type === 'dtmf_start') {
         setDtmfModal({ channel: msg.channel || '', sipUser: msg.sipUser || '' });
-      } else if (msg?.type === 'dtmf_done') {
-        setDtmfModal(null);
       }
+      // dtmf_done is handled by DtmfCaptureModal's saveAndClose which calls onClose
     };
     window.addEventListener('ws-message', handler);
     return () => window.removeEventListener('ws-message', handler);

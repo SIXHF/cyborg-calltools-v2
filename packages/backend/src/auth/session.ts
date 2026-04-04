@@ -13,6 +13,7 @@ interface Session {
   userId?: number;
   sipUser?: string;
   sipUsers?: string[];
+  sipGroups?: Array<{ account: string; sipUsers: string[] }>;
   permissions: Record<string, boolean>;
   ip: string;
   connectedAt: number;
@@ -172,6 +173,7 @@ export async function createSession(
     userId: user.userId,
     sipUser: user.sipUser,
     sipUsers: user.sipUsers,
+    sipGroups: user.sipGroups,
     permissions,
     ip,
     connectedAt: Date.now(),
