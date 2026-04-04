@@ -161,9 +161,53 @@ function handleMessage(event: MessageEvent) {
       ui.addToast((msg as any).using_default ? 'Hold music set to default' : 'Hold music updated', 'success', 3000);
       break;
 
-    case 'admin_broadcast':
-      ui.addToast(`[${msg.from}] ${msg.message}`, 'info', 10000);
+    case 'admin_broadcast': {
+      // V1 parity: colored toast, sound, desktop notification
+      const bcMsg = msg as any;
+      const bcColors: Record<string, string> = { orange: '#d29922', red: '#f85149', green: '#3fb950' };
+      const bcBgs: Record<string, string> = { orange: '#1a1700', red: '#1a1117', green: '#0d1a12' };
+      const bcColor = bcColors[bcMsg.color] || bcColors.orange;
+      const bcBg = bcBgs[bcMsg.color] || bcBgs.orange;
+
+      // Colored toast
+      ui.addToast(`[${bcMsg.from}] ${bcMsg.message}`, 'info', 10000);
+      // Apply color to toast element after render
+      setTimeout(() => {
+        const toastEl = document.querySelector('[role="alert"]') as HTMLElement;
+        if (toastEl) {
+          toastEl.style.borderColor = bcColor;
+          toastEl.style.color = bcColor;
+          toastEl.style.background = bcBg;
+        }
+      }, 50);
+
+      // Sound: two-tone beep (V1: 800Hz then 1000Hz)
+      try {
+        const actx = new AudioContext();
+        const playTone = (freq: number, delay: number) => {
+          const osc = actx.createOscillator();
+          const gain = actx.createGain();
+          osc.frequency.value = freq;
+          gain.gain.value = 0.15;
+          osc.connect(gain);
+          gain.connect(actx.destination);
+          osc.start(actx.currentTime + delay);
+          osc.stop(actx.currentTime + delay + 0.15);
+        };
+        playTone(800, 0);
+        playTone(1000, 0.17);
+      } catch {}
+
+      // Desktop notification (V1 parity)
+      try {
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('Admin Broadcast', { body: bcMsg.message, tag: 'admin-broadcast-' + Date.now() });
+        }
+      } catch {}
+
+      ui.addLogEntry(`Broadcast from ${bcMsg.from}: ${bcMsg.message}`);
       break;
+    }
 
     case 'error':
       // Don't show "Admin access required" errors to non-admin users (normal for user role)
