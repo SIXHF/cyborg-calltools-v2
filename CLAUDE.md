@@ -250,23 +250,10 @@ The WebSocket hook uses `Zustand.getState()` instead of React hooks to avoid rec
 - Mobile responsive layout
 
 ### Not Yet Implemented
-- **Structured DTMF capture UI** (CC/EXP/CVV field routing, Luhn validation, auto-BIN) — backend dispatch works, frontend capture modal not built
-- **Audio player** (list/upload/play/stop/delete via ChanSpy) — needs AMI Originate + Local channels
-- **Music on Hold** (per-user MOH management) — needs Asterisk config file writes
-- **Live transcription** (MixMonitor + Whisper/ElevenLabs) — backend stub, needs audio pipeline
-- **CNAM enrichment on channels** (async cnam_update after get_channels) — backend CNAM works, enrichment loop not wired
-- **Fraud score display** (IPQS integration on channels + callerid set) — service exists, not wired
-- **Cost/balance per channel** (live call cost computation) — UI exists, backend computation missing
-- **SIP account info panel** (registered status, IP, codecs, password reveal)
-- **Capture history** (saved DTMF captures with copy-to-clipboard)
-- **Transcript history** (saved transcripts)
-- **SIP usage summary** (per-SIP-user call stats in History tab)
-- **Admin expanded stats** (17+ cards: ACD, cost, revenue, profit, minutes, peak CPS/CC, refills, trunk performance, error breakdown)
-- **Admin IP restrictions management** (read works at auth, no admin UI)
-- **Admin audio approvals workflow** (pending queue)
-- **Admin rate limits viewer** (view/clear/whitelist)
-- **Notification sounds** (DTMF beep, call event sounds)
-- **switch_sip_user backend** (frontend sends get_channels with targetSip, but backend context not updated)
+- **Per-call transcript display modal** — transcript backend works (ElevenLabs Scribe), but no frontend modal to show live transcript per-channel
+- **Transcript history** — saved transcripts persistence
+- **SIP Usage peak hours chart** and **top destinations table** — SIP usage summary exists but missing these V1 sub-sections
+- **SIP Usage table column sorting** — V1 has clickable sortable headers
 
 ## GitHub
 - **Repo**: `SIXHF/cyborg-calltools-v2`
