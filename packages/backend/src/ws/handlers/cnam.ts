@@ -26,7 +26,9 @@ export async function handleCnamLookup(
       name: result.name || 'Unknown',
       carrier: result.carrier,
       lineType: result.type,
-    });
+      state: result.state,
+      city: result.city,
+    } as any);
   } catch (err) {
     console.error('[CNAM] Lookup error:', err);
     send(ws, {
