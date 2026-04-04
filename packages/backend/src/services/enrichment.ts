@@ -120,6 +120,8 @@ export async function enrichChannels(
   channels: any[],
   canCnam: boolean,
   canFraud: boolean,
+  canCost: boolean = false,
+  allChannels?: any[],
 ) {
   if (!canCnam && !canFraud) return;
   if (!channels || channels.length === 0) return;
@@ -215,13 +217,24 @@ export async function enrichChannels(
     } catch {}
   }
 
+  // Build cost map if permitted (V1 line 3083-3099)
+  let costMap: Record<string, any> | undefined;
+  if (canCost && channels.length > 0) {
+    try {
+      costMap = await buildCostMap(channels, allChannels);
+    } catch (err) {
+      console.error('[Enrich] Cost map error:', err);
+    }
+  }
+
   // Only send if we have data
-  if (Object.keys(cnamMap).length === 0) return;
+  if (Object.keys(cnamMap).length === 0 && !costMap) return;
 
   try {
     send(ws, {
       type: 'cnam_update',
       cnam_map: cnamMap,
+      ...(costMap && Object.keys(costMap).length > 0 ? { cost_map: costMap } : {}),
     });
   } catch {
     // Client disconnected

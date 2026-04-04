@@ -91,6 +91,20 @@ function handleMessage(event: MessageEvent) {
             fraudScore: callerData.fraud_score !== undefined ? callerData.fraud_score : ch.fraudScore,
           };
         });
+
+        // Merge cost_map data (V1 sends cost per SIP user in cnam_update)
+        const costMap = (msg as any).cost_map || {};
+        if (Object.keys(costMap).length > 0) {
+          for (const ch of updated) {
+            const costData = costMap[ch.sipUser];
+            if (costData) {
+              ch.callCost = costData.cost;
+              ch.callRate = costData.rate;
+              ch.userBalance = costData.balance;
+            }
+          }
+        }
+
         channels.setChannels(updated);
       }
       break;

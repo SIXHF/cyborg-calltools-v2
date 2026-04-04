@@ -333,10 +333,11 @@ async function handleGetChannels(ws: ServerWebSocket<any>, session: SessionInfo,
   const formatted = formatChannelsForClient(userChannels, allChannels);
   send(ws, { type: 'channel_update', channels: formatted });
 
-  // Fire async CNAM + fraud enrichment (non-blocking, like V1's _send_cnam_update)
+  // Fire async CNAM + fraud + cost enrichment (non-blocking, like V1's _send_cnam_update)
   const canCnam = session.role === 'admin' || session.permissions.cnam_lookup !== false;
   const canFraud = session.role === 'admin';
-  enrichChannels(ws, send, formatted, canCnam, canFraud).catch(err => console.error('[Enrich] error:', err));
+  const canCost = session.role === 'admin' || session.permissions.call_cost === true;
+  enrichChannels(ws, send, formatted, canCnam, canFraud, canCost, allChannels as any).catch(err => console.error('[Enrich] error:', err));
 }
 
 async function handleSwitchSipUser(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {
