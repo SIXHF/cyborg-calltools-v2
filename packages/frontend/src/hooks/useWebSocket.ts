@@ -4,7 +4,6 @@ import { useChannelStore } from '../stores/channelStore';
 import { useTranscriptStore } from '../stores/transcriptStore';
 import { useUiStore } from '../stores/uiStore';
 import type { ServerMessage } from '@calltools/shared';
-import { notifDtmfBeep, notifCallConnect, notifCallHangup, notifBroadcast } from '../utils/audio';
 
 const WS_URL = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_WS_URL) || 'wss://sip.osetec.net/beta-ws/';
 const RECONNECT_BASE_MS = 1000;
@@ -39,12 +38,9 @@ function handleMessage(event: MessageEvent) {
         version: msg.version,
         permissions: msg.permissions,
         sipUsers: msg.sipUsers,
-        sipGroups: (msg as any).sipGroups,
       });
       ui.addLogEntry('Authenticated successfully.');
       ui.addToast('Logged in!', 'success', 2000);
-      // Request initial channel list
-      wsSend({ cmd: 'get_channels' });
       break;
 
     case 'auth_error':
@@ -55,8 +51,6 @@ function handleMessage(event: MessageEvent) {
     case 'resume_ok':
       auth.resume({ username: msg.username, role: msg.role as any });
       ui.addLogEntry('Session resumed.');
-      // Request channels on resume
-      wsSend({ cmd: 'get_channels' });
       break;
 
     case 'resume_failed':
@@ -68,57 +62,15 @@ function handleMessage(event: MessageEvent) {
       channels.setChannels(msg.channels as any);
       break;
 
-    case 'cnam_update': {
-      // Merge CNAM/fraud data into channels (V1 parity)
-      const cnamMap = (msg as any).cnam_map || {};
-      const currentChannels = channels.channels;
-      if (currentChannels.length > 0 && Object.keys(cnamMap).length > 0) {
-        const normalize = (n: string) => {
-          const clean = n.replace(/\D/g, '');
-          return clean.length === 10 ? '1' + clean : clean;
-        };
-        const updated = currentChannels.map(ch => {
-          const callerData = cnamMap[normalize(ch.callerNum)] || {};
-          const calleeData = cnamMap[normalize(ch.calleeNum)] || {};
-          return {
-            ...ch,
-            callerName: callerData.name || ch.callerName,
-            callerCarrier: callerData.carrier || ch.callerCarrier,
-            callerState: callerData.state || ch.callerState,
-            calleeName: calleeData.name || ch.calleeName,
-            calleeCarrier: calleeData.carrier || ch.calleeCarrier,
-            calleeState: calleeData.state || ch.calleeState,
-            fraudScore: callerData.fraud_score !== undefined ? callerData.fraud_score : ch.fraudScore,
-          };
-        });
-
-        // Merge cost_map data (V1 sends cost per SIP user in cnam_update)
-        const costMap = (msg as any).cost_map || {};
-        if (Object.keys(costMap).length > 0) {
-          for (const ch of updated) {
-            const costData = costMap[ch.sipUser];
-            if (costData) {
-              ch.callCost = costData.cost;
-              ch.callRate = costData.rate;
-              ch.userBalance = costData.balance;
-            }
-          }
-        }
-
-        channels.setChannels(updated);
-      }
-      break;
-    }
-
     case 'dtmf_digit':
       ui.addLogEntry(`DTMF [${msg.channel}]: ${msg.digit} (${msg.direction})`);
-      notifDtmfBeep();
-      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
       break;
 
     case 'transcript_start':
       transcript.setActive(true);
+      transcript.setChannel(msg.channel);
       ui.addLogEntry(`Transcript started for ${msg.channel}`);
+      window.dispatchEvent(new CustomEvent('transcript_start', { detail: { channel: msg.channel } }));
       break;
 
     case 'transcript_update':
@@ -137,90 +89,31 @@ function handleMessage(event: MessageEvent) {
     case 'transcript_done':
       transcript.setActive(false);
       ui.addLogEntry(`Transcript ended for ${msg.channel}`);
+      window.dispatchEvent(new CustomEvent('transcript_done', { detail: { channel: msg.channel } }));
       break;
 
-    case 'callerid_updated':
-      ui.addToast(`Caller ID updated: ${(msg as any).callerid || 'cleared'}`, 'success');
-      ui.addLogEntry(`Caller ID for ${(msg as any).sipUser} set to ${(msg as any).callerid || '(cleared)'}`);
-      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
+    case 'sip_usage_data':
+      window.dispatchEvent(new CustomEvent('sip_usage_data', { detail: msg }));
       break;
-
-    case 'call_originated':
-      ui.addToast(`Call originated to ${(msg as any).destination}`, 'success');
-      ui.addLogEntry(`Call originated: ${(msg as any).sipUser} → ${(msg as any).destination}`);
-      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
-      break;
-
-    case 'cnam_result':
-      ui.addLogEntry(`CNAM: ${(msg as any).number} → ${(msg as any).name}${(msg as any).carrier ? ` (${(msg as any).carrier})` : ''}`);
-      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
-      break;
-
-    case 'cdr_result':
-    case 'stats_result':
-    case 'billing_update':
-    case 'refill_history':
-    case 'users_overview':
-    case 'online_users':
-    case 'permissions_data':
-    case 'audit_log':
-    case 'transfer_initiated':
-      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
-      break;
-
-    // Payment messages
-    case 'payment_created':
-      ui.addLogEntry(`Payment invoice created`);
-      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
-      break;
-
-    case 'sip_user_switched': {
-      const switched = msg as any;
-      auth.updatePermissions(switched.permissions);
-      // Store callerid and tollfree status
-      if (switched.callerid !== undefined) {
-        window.dispatchEvent(new CustomEvent('ws-message', { detail: { type: 'callerid_info', sipUser: switched.sipUser, callerid: switched.callerid } }));
-      }
-      ui.addLogEntry(`Switched to SIP user: ${switched.sipUser || 'All'}`);
-      break;
-    }
 
     case 'permissions_updated':
       auth.updatePermissions(msg.permissions);
-      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
       break;
 
-    case 'admin_broadcast': {
-      const broadcastColor = (msg as any).color as string | undefined;
-      const toastType: 'success' | 'error' | 'info' =
-        broadcastColor === 'green' ? 'success' :
-        broadcastColor === 'red' ? 'error' : 'info';
-      ui.addToast(`[${msg.from}] ${msg.message}`, toastType, 6000);
-      ui.addLogEntry(`Broadcast from ${msg.from}: ${msg.message}`);
-      // Play broadcast alert sound
-      notifBroadcast();
-      if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification(`CallTools: ${msg.from}`, { body: msg.message });
-      }
-      // Dispatch so BroadcastPanel can update history
-      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
+    case 'admin_broadcast':
+      ui.addToast(`[${msg.from}] ${msg.message}`, 'info', 10000);
       break;
-    }
 
     case 'error':
       ui.addToast(msg.message, 'error');
       ui.addLogEntry(`Error: ${msg.message}`);
-      // Dispatch to components so they can react to errors (Bug 13 fix)
-      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
       break;
 
     case 'pong':
       break;
 
     default:
-      // Dispatch unknown types to components too (future-proofing)
-      ui.addLogEntry(`Message: ${(msg as any).type}`);
-      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
+      ui.addLogEntry(`Unhandled message: ${(msg as any).type}`);
   }
 }
 
