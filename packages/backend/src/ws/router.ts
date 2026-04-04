@@ -456,7 +456,14 @@ async function handleStartTranscript(ws: ServerWebSocket<any>, session: SessionI
 
   // Start real transcription via ElevenLabs/Whisper
   try {
-    await startTranscription(ws, send, msg.channel, session.username);
+    const allChannels = await getActiveChannels();
+    const channelList = allChannels.map((ch: any) => ({
+      channel: ch.channel || ch.name || '',
+      bridgeid: ch.bridgeid || ch.bridgeId || '',
+      callerid: ch.callerid || ch.callerNum || '',
+      exten: ch.exten || ch.extension || '',
+    }));
+    await startTranscription(ws, session as any, msg.channel, channelList, send, () => {});
   } catch (err) {
     console.error('[Transcript] Failed to start:', err);
     send(ws, { type: 'error', message: 'Transcription service unavailable.', code: 'SERVICE_ERROR' });
