@@ -167,7 +167,7 @@ export function SettingsTab() {
       {(role === 'admin' || permissions.moh !== false) && <MohPanel />}
 
       {/* SIP Account Info — hidden for admin (V1 line 3298) */}
-      {role !== 'admin' && <SipAccountInfo />}
+      <SipAccountInfo />
 
       {/* Notification Preferences — persisted to localStorage */}
       <NotificationSettings />
