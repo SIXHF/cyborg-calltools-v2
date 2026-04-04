@@ -65,7 +65,7 @@ function SipUsagePanel() {
   const usageMsg = useWsMessage<any>('sip_usage_result');
 
   useEffect(() => {
-    wsSend({ cmd: 'get_sip_usage', targetSip: selectedSip || undefined });
+    wsSend({ cmd: 'get_sip_usage', targetSip: (selectedSip && !selectedSip.startsWith('account:')) ? selectedSip : undefined });
   }, [selectedSip]);
 
   useEffect(() => {
@@ -78,7 +78,7 @@ function SipUsagePanel() {
   const fetchUsage = () => {
     wsSend({
       cmd: 'get_sip_usage',
-      targetSip: selectedSip || undefined,
+      targetSip: (selectedSip && !selectedSip.startsWith('account:')) ? selectedSip : undefined,
       ...(dateFrom ? { dateFrom } : {}),
       ...(dateTo ? { dateTo } : {}),
     });
@@ -96,7 +96,7 @@ function SipUsagePanel() {
         <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="form-input !py-1.5 !px-2.5 !text-xs" />
         <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="form-input !py-1.5 !px-2.5 !text-xs" />
         <button onClick={fetchUsage} className="btn btn-sm btn-primary">Search</button>
-        <button onClick={() => { setDateFrom(''); setDateTo(''); wsSend({ cmd: 'get_sip_usage', targetSip: selectedSip || undefined }); }} className="btn btn-sm">Clear</button>
+        <button onClick={() => { setDateFrom(''); setDateTo(''); wsSend({ cmd: 'get_sip_usage', targetSip: (selectedSip && !selectedSip.startsWith('account:')) ? selectedSip : undefined }); }} className="btn btn-sm">Clear</button>
       </div>
 
       {/* Summary Cards */}
@@ -309,7 +309,7 @@ export function HistoryTab() {
       search: (overrides?.search ?? search) || undefined,
       dateFrom: (overrides?.dateFrom ?? dateFrom) || undefined,
       dateTo: (overrides?.dateTo ?? dateTo) || undefined,
-      targetSip: selectedSip || undefined,
+      targetSip: (selectedSip && !selectedSip.startsWith('account:')) ? selectedSip : undefined,
     });
   };
 

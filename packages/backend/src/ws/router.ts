@@ -417,7 +417,7 @@ async function handleGetSipInfo(ws: ServerWebSocket<any>, session: SessionInfo, 
         // Check registration status via Asterisk CLI
         let registered = false;
         try {
-          const proc = Bun.spawn(['asterisk', '-rx', `sip show peer ${row.name}`], {
+          const proc = Bun.spawn(['/usr/sbin/asterisk', '-rx', `sip show peer ${row.name}`], {
             stdout: 'pipe',
             stderr: 'pipe',
           });

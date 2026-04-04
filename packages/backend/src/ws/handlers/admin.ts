@@ -320,8 +320,8 @@ export async function handleForceLogout(
   send: SendFn
 ) {
   const { targetToken } = msg;
-  if (!targetToken) {
-    send(ws, { type: 'error', message: 'Missing target token.', code: 'INVALID_INPUT' });
+  if (!targetToken || targetToken.length < 8) {
+    send(ws, { type: 'error', message: 'Invalid target token.', code: 'INVALID_INPUT' });
     return;
   }
 
@@ -480,6 +480,7 @@ export async function handleSetGlobalSettings(
       const sessions = getActiveSessions();
       for (const s of sessions) {
         const perms = await resolvePermissions(s.role, s.sipUser, s.userId?.toString());
+        s.permissions = perms; // Update backend session too (V1 line 4197)
         if (s.ws) {
           try {
             const wsAny = s.ws as any;

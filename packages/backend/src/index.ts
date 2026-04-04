@@ -3,6 +3,7 @@ import { ClientMessage, type ServerMessage } from '@calltools/shared';
 import { authenticate, resumeSession, createSession, destroySession, getSession, disconnectSession } from './auth/session';
 import { checkRateLimit } from './ws/middleware';
 import { routeMessage, setBroadcastFunction } from './ws/router';
+import { cleanupMonitor } from './ws/handlers/dtmf';
 import { auditLog } from './audit/logger';
 import { initAmiClient } from './ami/client';
 import { initDatabase } from './db/mysql';
@@ -274,6 +275,7 @@ const server = Bun.serve({
           // Move session to disconnected state for resume (5-min TTL)
           disconnectSession(ws.data.token);
         }
+        cleanupMonitor(ws.data.token); // Clean up DTMF monitor (V1 line 2682)
       }
       untrackConnection(ws);
     },

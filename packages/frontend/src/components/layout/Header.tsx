@@ -27,18 +27,17 @@ export function Header() {
   const balance = balanceMsg?.balance;
 
   const handleSipChange = (value: string) => {
-    setSelectedSip(value);
+    // Send WS commands FIRST so server updates before frontend re-fetches
     if (value.startsWith('account:')) {
       const accountName = value.slice('account:'.length);
-      // Tell server to switch to account-level filtering
       wsSend({ cmd: 'switch_sip_user', sipUser: '', account: accountName });
-      wsSend({ cmd: 'get_channels', targetSip: undefined });
+      wsSend({ cmd: 'get_channels' });
     } else {
-      // Tell server about the switch — returns updated permissions, callerid, tollfree
       wsSend({ cmd: 'switch_sip_user', sipUser: value || '' });
-      // Refresh channels with new SIP filter
       wsSend({ cmd: 'get_channels', targetSip: value || undefined });
     }
+    // THEN update frontend store (triggers tab re-fetches)
+    setSelectedSip(value);
   };
 
   return (
