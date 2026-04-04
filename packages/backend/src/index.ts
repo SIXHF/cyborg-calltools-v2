@@ -175,7 +175,7 @@ const server = Bun.serve({
           return;
         }
 
-        const session = createSession(authResult.user!, clientIp, ws);
+        const session = await createSession(authResult.user!, clientIp, ws);
         ws.data.token = session.token;
 
         send(ws, {
