@@ -14,6 +14,7 @@ interface Session {
   sipUser?: string;
   sipUsers?: string[];
   sipGroups?: Array<{ account: string; sipUsers: string[] }>;
+  selectedSipUser?: string;
   permissions: Record<string, boolean>;
   ip: string;
   connectedAt: number;

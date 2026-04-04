@@ -197,7 +197,8 @@ export function MonitorTab() {
   }, []);
 
   // Client-side SIP filter (Bug 10.1 fix: server broadcast sends all, we filter here)
-  const filteredChannels = selectedSip
+  // Client-side SIP filter — account: prefix means show all (server filtered by role)
+  const filteredChannels = selectedSip && !selectedSip.startsWith('account:')
     ? channels.filter(ch => ch.sipUser === selectedSip)
     : channels;
 
