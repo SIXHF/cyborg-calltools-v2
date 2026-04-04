@@ -8,9 +8,10 @@ type AdminPage = 'stats' | 'settings' | 'broadcast';
 
 function formatDuration(secs: number): string {
   if (!secs) return '0s';
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  if (m > 60) { const h = Math.floor(m / 60); return `${h}h ${m % 60}m`; }
+  const totalSecs = Math.round(secs);
+  const m = Math.floor(totalSecs / 60);
+  const s = totalSecs % 60;
+  if (m >= 60) { const h = Math.floor(m / 60); return `${h}h ${m % 60}m`; }
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
@@ -469,7 +470,7 @@ function AccessControlPanel() {
             <button onClick={() => removeAccount(name)} className="text-ct-red text-xs hover:underline">Remove</button>
           </div>
         ))}
-        {allowedAccounts.length === 0 && <div className="empty-state">No accounts in access list (all accounts allowed).</div>}
+        {allowedAccounts.length === 0 && <div className="empty-state">No accounts in access list — all non-admin users can log in.</div>}
       </div>
     </div>
   );

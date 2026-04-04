@@ -135,8 +135,8 @@ async function isAccountAllowed(username: string, ip: string, role: UserRole): P
   // Admins are always allowed
   if (role === 'admin') return { ok: true };
 
-  // Check allowed_accounts list
-  if (perms.allowed_accounts && !perms.allowed_accounts.includes(username)) {
+  // Check allowed_accounts list (empty array = all allowed, only non-empty restricts)
+  if (perms.allowed_accounts?.length > 0 && !perms.allowed_accounts.includes(username)) {
     return { ok: false, reason: 'Account not enabled for CallTools.' };
   }
 
