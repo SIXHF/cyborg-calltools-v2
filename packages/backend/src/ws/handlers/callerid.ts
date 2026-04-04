@@ -32,7 +32,8 @@ export async function handleGetCallerId(
       [targetUser]
     );
     const callerid = rows.length > 0 ? (rows[0].callerid || '') : '';
-    send(ws, { type: 'callerid_updated', sipUser: targetUser, callerid } as any);
+    // Use callerid_info type (not callerid_updated which triggers toast)
+    send(ws, { type: 'callerid_info' as any, sipUser: targetUser, callerid } as any);
   } catch {
     send(ws, { type: 'error', message: 'Failed to get caller ID.', code: 'DB_ERROR' });
   }

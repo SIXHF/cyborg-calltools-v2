@@ -12,6 +12,7 @@ export function SettingsTab() {
   const [savedMsg, setSavedMsg] = useState('');
 
   const calleridUpdate = useWsMessage<any>('callerid_updated');
+  const calleridInfo = useWsMessage<any>('callerid_info');
 
   useEffect(() => {
     if (calleridUpdate) {
@@ -33,12 +34,12 @@ export function SettingsTab() {
     }
   }, [selectedSip]);
 
-  // Update input when callerid is fetched
+  // Update input when callerid is fetched (callerid_info = read, callerid_updated = write)
   useEffect(() => {
-    if (calleridUpdate && calleridUpdate.sipUser === selectedSip) {
-      setCallerid(calleridUpdate.callerid || '');
+    if (calleridInfo && calleridInfo.sipUser === selectedSip) {
+      setCallerid(calleridInfo.callerid || '');
     }
-  }, [calleridUpdate, selectedSip]);
+  }, [calleridInfo, selectedSip]);
 
   const handleSetCallerid = () => {
     if (!selectedSip) return;
