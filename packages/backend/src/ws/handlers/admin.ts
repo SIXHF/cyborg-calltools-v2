@@ -404,19 +404,43 @@ export async function handleGetUsersOverview(
       });
     }
 
-    const result = users.map((u: any) => ({
-      id: u.id,
-      username: u.username,
-      credit: parseFloat(String(u.credit)) || 0,
-      role: u.id_group === 1 ? 'admin' : 'user',
-      sipCount: u.sip_count || 0,
-      active: !!u.active,
-      lastRefill: u.last_refill || null,
-      lastRefillAmount: u.last_refill_amount ? parseFloat(String(u.last_refill_amount)) : null,
-      sipUsers: sipByUser.get(u.id) || [],
-    }));
+    // Get registered SIP peers for online status (V1 parity)
+    let registeredPeers = new Set<string>();
+    try {
+      const proc = Bun.spawn(['/usr/sbin/asterisk', '-rx', 'sip show peers'], { stdout: 'pipe', stderr: 'pipe' });
+      const output = await new Response(proc.stdout).text();
+      await proc.exited;
+      for (const line of output.split('\n')) {
+        if (line.includes('OK') && !line.startsWith('Name')) {
+          const peerName = line.split(/\s+/)[0]?.split('/')[0];
+          if (peerName) registeredPeers.add(peerName);
+        }
+      }
+    } catch {}
 
-    send(ws, { type: 'users_overview', users: result });
+    const result = users.map((u: any) => {
+      const userSips = sipByUser.get(u.id) || [];
+      const registeredCount = userSips.filter((s: any) => registeredPeers.has(s.extension)).length;
+      return {
+        id: u.id,
+        username: u.username,
+        credit: parseFloat(String(u.credit)) || 0,
+        role: u.id_group === 1 ? 'admin' : 'user',
+        sipCount: u.sip_count || 0,
+        registeredCount,
+        active: !!u.active,
+        lastRefill: u.last_refill || null,
+        lastRefillAmount: u.last_refill_amount ? parseFloat(String(u.last_refill_amount)) : null,
+        sipUsers: userSips.map((s: any) => ({ ...s, registered: registeredPeers.has(s.extension) })),
+      };
+    });
+
+    // V1 line 5672-5674: filter out never-refilled users, sort by registered count desc
+    const filtered = result
+      .filter((u: any) => u.lastRefill !== null)
+      .sort((a: any, b: any) => (b.registeredCount || 0) - (a.registeredCount || 0));
+
+    send(ws, { type: 'users_overview', users: filtered });
   } catch (err) {
     console.error('[Admin] Users overview error:', err);
     send(ws, { type: 'error', message: 'Failed to load users.', code: 'DB_ERROR' });

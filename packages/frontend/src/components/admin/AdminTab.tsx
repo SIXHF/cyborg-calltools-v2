@@ -75,26 +75,29 @@ function StatsDashboard() {
         {stats.trunk_groups && Object.keys(stats.trunk_groups).length > 0 && (
           <div className="px-4 pb-4">
             <h3 className="text-xs font-semibold text-ct-muted uppercase tracking-wider mb-2">Trunk Failover Groups</h3>
-            {Object.entries(stats.trunk_groups).map(([name, group]: [string, any]) => (
-              <div key={name} className="mb-2 p-3 bg-ct-surface-solid border border-ct-border-solid rounded-lg">
-                <div className="text-sm font-semibold text-ct-accent">{name} <span className="text-ct-muted text-xs font-normal">({group.type})</span></div>
-                <div className="flex flex-wrap gap-2 mt-1">
+            {/* V1: inline-block cards with vertical trunk list and ▼ arrows between */}
+            <div className="flex flex-wrap gap-3">
+              {Object.entries(stats.trunk_groups).map(([name, group]: [string, any]) => (
+                <div key={name} className="inline-block bg-ct-bg border border-ct-border-solid rounded-lg px-4 py-2.5 align-top">
+                  <div className="font-semibold text-ct-accent mb-1.5">{name} <span className="text-ct-muted font-normal text-[11px]">({group.type})</span></div>
                   {group.trunks.map((t: any, i: number) => (
-                    <div key={i} className="text-center">
-                      <span className="text-xs font-mono text-ct-text-secondary">{t.name}</span>
-                      {t.balance != null && (
-                        <span className="text-[11px] font-semibold ml-1" style={{ color: t.balance >= 200 ? '#3fb950' : t.balance >= 100 ? '#d29922' : '#f85149' }}>
-                          ${t.balance.toFixed(2)}
-                        </span>
-                      )}
+                    <div key={i}>
+                      <div className="text-center font-mono text-ct-text-secondary py-0.5">
+                        {t.name}
+                        {t.balance != null && (
+                          <span className="text-[11px] font-semibold ml-1" style={{ color: t.balance >= 200 ? '#3fb950' : t.balance >= 100 ? '#d29922' : '#f85149' }}>
+                            ${t.balance.toFixed(2)}
+                          </span>
+                        )}
+                      </div>
                       {i < group.trunks.length - 1 && (
-                        <div className="text-ct-muted text-[10px]">&#9660;</div>
+                        <div className="text-center text-ct-muted text-[10px]">&#9660;</div>
                       )}
                     </div>
                   ))}
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
 
@@ -263,21 +266,36 @@ function UsersOverview() {
               className={`bg-ct-surface-solid border rounded-[10px] p-4 cursor-pointer transition-all ${expandedId === u.id ? 'border-ct-blue' : 'border-ct-border-solid hover:border-ct-border-hover'}`}
               onClick={() => setExpandedId(expandedId === u.id ? null : u.id)}
             >
+              {/* V1 header: username + online dot + role badge */}
               <div className="flex justify-between items-center mb-2">
                 <span className="text-base font-bold text-ct-accent font-mono">{u.username}</span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-[10px] font-semibold uppercase tracking-wider ${
-                  u.role === 'admin' ? 'bg-[#2d1b00] text-ct-yellow' : 'bg-[#1a1040] text-ct-purple-dark'
-                }`}>{u.role}</span>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full inline-block" style={{
+                    background: (u.registeredCount || 0) > 0 ? '#3fb950' : '#484f58',
+                    boxShadow: (u.registeredCount || 0) > 0 ? '0 0 6px #3fb95066' : 'none',
+                  }} />
+                  <span className="text-[11px]" style={{ color: (u.registeredCount || 0) > 0 ? '#3fb950' : '#484f58' }}>
+                    {(u.registeredCount || 0) > 0 ? 'Online' : 'Offline'}
+                  </span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-[10px] font-semibold uppercase tracking-wider ${
+                    u.role === 'admin' ? 'bg-[#2d1b00] text-ct-yellow' : 'bg-[#1a1040] text-ct-purple-dark'
+                  }`}>{u.role}</span>
+                </div>
               </div>
+              {/* V1 stats: SIP X/Y registered, Balance, Last Refill */}
               <div className="grid grid-cols-2 gap-1 text-xs text-ct-muted leading-relaxed">
-                <span>Balance:</span>
-                <span className={`font-medium ${u.credit < 1 ? 'text-ct-red' : 'text-ct-green'}`}>${u.credit.toFixed(2)}</span>
                 <span>SIP Users:</span>
-                <span className="text-ct-text-secondary font-medium">{u.sipCount}</span>
-                {u.lastRefill && <>
-                  <span>Last Refill:</span>
-                  <span className="text-ct-text-secondary">{new Date(u.lastRefill).toLocaleDateString()}{u.lastRefillAmount != null ? ` ($${u.lastRefillAmount.toFixed(2)})` : ''}</span>
-                </>}
+                <span className="text-ct-text-secondary font-medium">{u.registeredCount || 0}/{u.sipCount} registered</span>
+                <span>Balance:</span>
+                <span className="text-ct-green font-medium">${u.credit.toFixed(2)}</span>
+                <div className="col-span-2">
+                  <span className="text-ct-muted">Last Refill: </span>
+                  <span className="text-ct-yellow font-medium">
+                    {u.lastRefill
+                      ? `$${u.lastRefillAmount != null ? u.lastRefillAmount.toFixed(2) : '?'} (${new Date(u.lastRefill).toLocaleDateString()})`
+                      : 'Never'}
+                  </span>
+                </div>
               </div>
 
               {/* Expandable SIP Details */}
@@ -287,6 +305,11 @@ function UsersOverview() {
                     <div key={sip.extension} className="bg-ct-bg border border-ct-border-solid rounded-lg p-2.5">
                       <div className="flex justify-between items-center mb-1">
                         <span className="text-sm font-semibold text-ct-accent font-mono">{sip.extension}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-lg ${
+                          sip.registered ? 'bg-ct-green-bg text-ct-green' : 'bg-ct-red-bg text-ct-red'
+                        }`}>
+                          {sip.registered ? 'Registered' : 'Unregistered'}
+                        </span>
                       </div>
                       <div className="text-[11px] text-ct-muted leading-relaxed">
                         CallerID: {sip.callerid || 'Not set'}<br/>
