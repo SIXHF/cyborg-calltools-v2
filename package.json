@@ -1,0 +1,16 @@
+{
+  "name": "cyborg-calltools-v2",
+  "private": true,
+  "workspaces": [
+    "packages/shared",
+    "packages/backend",
+    "packages/frontend"
+  ],
+  "scripts": {
+    "dev:backend": "bun run --filter @calltools/backend dev",
+    "dev:frontend": "bun run --filter @calltools/frontend dev",
+    "dev": "bun run dev:backend & bun run dev:frontend",
+    "build": "bun run --filter @calltools/shared build && bun run --filter @calltools/frontend build",
+    "lint": "bun run --filter '*' lint"
+  }
+}
