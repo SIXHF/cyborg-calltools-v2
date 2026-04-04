@@ -112,7 +112,7 @@ export function BillingTab() {
         </div>
         <div className="p-4 space-y-3">
           <div className="flex gap-2 flex-wrap">
-            {[50, 100, 250, 500].map(amt => (
+            {[50, 100, 250].map(amt => (
               <button key={amt} onClick={() => setRechargeAmt(String(amt))} className="btn btn-sm">
                 ${amt}
               </button>

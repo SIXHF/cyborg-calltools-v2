@@ -102,14 +102,16 @@ export function SettingsTab() {
                     onChange={e => setCallerid(e.target.value)}
                     placeholder="e.g. 18478603211"
                     className="form-input flex-1"
-                    maxLength={15}
+                    maxLength={11}
+                    inputMode="numeric"
+                    onInput={(e) => { (e.target as HTMLInputElement).value = (e.target as HTMLInputElement).value.replace(/[^0-9]/g, ''); }}
                   />
                   <button
                     onClick={handleSetCallerid}
                     disabled={saving || !callerid.trim() || showTollFreeWarning}
                     className="btn btn-primary"
                   >
-                    {saving ? 'Saving...' : 'Set Caller ID'}
+                    {saving ? 'Saving...' : 'Save'}
                   </button>
                 </div>
               </div>
@@ -138,8 +140,8 @@ export function SettingsTab() {
         </div>
       </div>
 
-      {/* SIP Account Info */}
-      <SipAccountInfo />
+      {/* SIP Account Info — hidden for admin (V1 line 3298) */}
+      {role !== 'admin' && <SipAccountInfo />}
 
       {/* Notification Preferences — persisted to localStorage */}
       <NotificationSettings />
@@ -255,9 +257,9 @@ function NotificationSettings() {
   };
 
   const items = [
-    { key: 'dtmfSound' as const, label: 'DTMF beep sound', desc: 'Play a sound when a DTMF digit is captured' },
-    { key: 'callEvents' as const, label: 'Call connect notification', desc: 'Alert when a monitored call connects' },
-    { key: 'desktop' as const, label: 'Desktop notifications', desc: 'Show browser notifications for admin broadcasts' },
+    { key: 'dtmfSound' as const, label: 'DTMF Sounds', desc: 'Play a beep when a DTMF digit is captured' },
+    { key: 'callEvents' as const, label: 'Call Events', desc: 'Play a sound on call connect/hangup' },
+    { key: 'desktop' as const, label: 'Desktop Notifications', desc: 'Show browser notifications for important events' },
   ];
 
   return (

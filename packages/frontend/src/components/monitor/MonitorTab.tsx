@@ -14,15 +14,15 @@ function formatDuration(seconds: number): string {
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
-/** Format phone number for display */
+/** Format phone number for display — matches V1's fmtPhone exactly */
 function fmtPhone(num: string): string {
   if (!num) return '—';
-  const clean = num.replace(/[^0-9]/g, '');
-  if (clean.length === 11 && clean.startsWith('1')) {
-    return `+1 (${clean.slice(1, 4)}) ${clean.slice(4, 7)}-${clean.slice(7)}`;
+  const d = String(num).replace(/[^0-9]/g, '');
+  if (d.length === 11 && d[0] === '1') {
+    return `1 (${d.slice(1, 4)}) ${d.slice(4, 7)}-${d.slice(7)}`;
   }
-  if (clean.length === 10) {
-    return `(${clean.slice(0, 3)}) ${clean.slice(3, 6)}-${clean.slice(6)}`;
+  if (d.length === 10) {
+    return `1 (${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
   }
   return num;
 }
@@ -76,7 +76,7 @@ function ChannelRow({ ch, canDtmf, canTranscript, canAudio, canCost, isAdmin, on
     <div className="channel-row">
       {/* Top row: Agent, State, Duration, Cost, Trunk */}
       <div className="flex items-center gap-2.5 w-full flex-wrap">
-        <span className="agent-badge">{ch.sipUser}</span>
+        <span className="text-[15px] font-bold text-ct-accent" style={{ minWidth: 120 }}>{ch.sipUser}</span>
         <span className={`tag ${stateTagClass(ch.state)}`}>
           {displayState(ch.state, ch.rawState)}
         </span>
@@ -218,7 +218,7 @@ export function MonitorTab() {
     <div className="glass-panel animate-fade-in" role="tabpanel" id="panel-monitor">
       {/* Panel header */}
       <div className="panel-header">
-        <h2>Active Calls</h2>
+        <h2>My Active Calls</h2>
         <div className="flex gap-2.5 items-center">
           <span className="stat-badge stat-total">T: {total}</span>
           <span className="stat-badge stat-up">UP: {connected.length}</span>

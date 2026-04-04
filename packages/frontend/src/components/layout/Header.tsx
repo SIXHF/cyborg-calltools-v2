@@ -103,7 +103,11 @@ export function Header() {
           <span className="text-[10px] text-ct-muted-dark font-mono hidden sm:inline">v{version}</span>
         )}
 
-        <span className="user-badge-v1">
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-2xl text-[13px] font-medium"
+          style={{
+            background: role === 'admin' ? '#2d1b00' : role === 'user' ? '#1a1040' : '#0d2818',
+            color: role === 'admin' ? '#d29922' : role === 'user' ? '#8b5cf6' : '#3fb950',
+          }}>
           <span className="w-2 h-2 rounded-full bg-current" />
           {roleLabel}: {username}
         </span>

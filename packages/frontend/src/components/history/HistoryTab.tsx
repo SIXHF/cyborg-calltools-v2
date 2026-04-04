@@ -33,11 +33,12 @@ interface SipUsageTotals {
   cost: number;
 }
 
+/** V1 format: Xm Ys */
 function formatDuration(seconds: number): string {
-  if (!seconds) return '0:00';
+  if (!seconds) return '0s';
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
 function statusBadge(status: string) {
@@ -104,7 +105,7 @@ function SipUsagePanel() {
             { label: 'Answered', value: totals.answered, color: '#3fb950' },
             { label: 'Failed', value: totals.failed, color: '#f85149' },
             { label: 'Minutes', value: totals.minutes.toFixed(1), color: '#58a6ff' },
-            { label: 'Cost', value: `$${totals.cost.toFixed(4)}`, color: '#d29922' },
+            { label: 'Cost', value: `$${totals.cost.toFixed(2)}`, color: '#d29922' },
           ].map(c => (
             <div key={c.label} className="bg-ct-surface-solid border border-ct-border-solid rounded-[10px] p-3 text-center">
               <div className="text-xl font-bold font-mono" style={{ color: c.color }}>{c.value}</div>
@@ -139,9 +140,9 @@ function SipUsagePanel() {
                   <td className="font-mono text-xs text-ct-green">{s.answered}</td>
                   <td className="font-mono text-xs text-ct-red">{s.failed}</td>
                   <td className="font-mono text-xs">{s.minutes.toFixed(1)}</td>
-                  <td className="font-mono text-xs text-ct-yellow">{s.cost > 0 ? `$${s.cost.toFixed(4)}` : '-'}</td>
+                  <td className="font-mono text-xs text-ct-yellow">{s.cost > 0 ? `$${s.cost.toFixed(2)}` : '-'}</td>
                   <td>
-                    <span className={`tag ${s.asr >= 50 ? 'tag-up' : s.asr >= 20 ? 'tag-ring' : 'tag-down'}`}>{s.asr}%</span>
+                    <span className={`tag ${s.asr >= 50 ? 'tag-up' : s.asr >= 25 ? 'tag-ring' : 'tag-down'}`}>{s.asr}%</span>
                   </td>
                 </tr>
               ))}
@@ -371,10 +372,10 @@ export function HistoryTab() {
                     <td className="font-mono text-xs">{r.destination}</td>
                     <td className="font-mono text-xs">{formatDuration(r.duration)}</td>
                     <td>
-                      <span className={`tag ${statusBadge(r.status)}`}>{r.status}</span>
+                      <span className={`tag ${statusBadge(r.status)}`}>{r.status.toUpperCase()}</span>
                     </td>
                     <td className="font-mono text-xs text-ct-yellow">
-                      {r.cost > 0 ? `$${r.cost.toFixed(4)}` : '-'}
+                      {r.cost > 0 ? `$${r.cost.toFixed(2)}` : '-'}
                     </td>
                   </tr>
                 ))}
