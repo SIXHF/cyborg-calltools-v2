@@ -319,11 +319,21 @@ async function handleGetChannels(ws: ServerWebSocket<any>, session: SessionInfo,
   // Fire async CNAM + fraud enrichment (non-blocking, like V1's _send_cnam_update)
   const canCnam = session.role === 'admin' || session.permissions.cnam_lookup !== false;
   const canFraud = session.role === 'admin';
-  enrichChannels(ws, send, formatted, canCnam, canFraud).catch(() => {});
+  enrichChannels(ws, send, formatted, canCnam, canFraud).catch(err => console.error('[Enrich] error:', err));
 }
 
 async function handleSwitchSipUser(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {
   const sipUser = (msg.sipUser || '').trim();
+
+  // Ownership validation: non-admin can only switch to their own SIP users
+  if (sipUser && session.role !== 'admin') {
+    const ownedSips = session.sipUsers ?? (session.sipUser ? [session.sipUser] : []);
+    if (!ownedSips.includes(sipUser)) {
+      send(ws, { type: 'error', message: 'Access denied for this SIP user.', code: 'FORBIDDEN' });
+      return;
+    }
+  }
+
   // Update session context
   (session as any).selectedSipUser = sipUser || undefined;
 
@@ -422,7 +432,7 @@ async function handleGetSipInfo(ws: ServerWebSocket<any>, session: SessionInfo, 
           callerid: row.callerid || '',
           host: row.host || '',
           codecs: row.allow || '',
-          secret: row.secret || '',
+          secret: session.role === 'admin' ? (row.secret || '') : '••••••',
           registered,
         };
       })
