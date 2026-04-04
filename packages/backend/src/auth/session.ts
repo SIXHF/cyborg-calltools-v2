@@ -1,7 +1,7 @@
 import type { ServerWebSocket } from 'bun';
 import type { AuthState, Permissions, UserRole } from '@calltools/shared';
 import { verifyPassword } from './verify';
-import { loadPermissions } from './permissions';
+import { loadPermissions, resolvePermissions } from './permissions';
 import { dbQuery } from '../db/mysql';
 
 const SESSION_RESUME_TTL = Number(process.env.SESSION_RESUME_TTL ?? 300) * 1000;
@@ -51,8 +51,15 @@ export async function authenticate(username: string, password: string, clientIp:
     const valid = await verifyPassword(password, sip.secret);
     if (!valid) return { success: false, error: 'Invalid credentials.' };
 
-    // Check if account is allowed
-    const allowed = await isAccountAllowed(username, clientIp, 'sip_user');
+    // Resolve parent account name for access control
+    const parentRows = await dbQuery<{ username: string }>(
+      'SELECT username FROM pkg_user WHERE id = ? LIMIT 1',
+      [sip.id_user]
+    );
+    const parentUsername = parentRows.length > 0 ? parentRows[0].username : username;
+
+    // Check if parent account is allowed
+    const allowed = await isAccountAllowed(parentUsername, clientIp, 'sip_user');
     if (!allowed.ok) return { success: false, error: allowed.reason };
 
     return {
@@ -121,13 +128,19 @@ async function isAccountAllowed(username: string, ip: string, role: UserRole): P
   return { ok: true };
 }
 
-export function createSession(
+export async function createSession(
   user: NonNullable<AuthResult['user']>,
   ip: string,
   ws: ServerWebSocket<unknown>
-): Session {
+): Promise<Session> {
   const token = generateToken();
-  const permissions = {}; // Will be loaded from permissions file
+
+  // Resolve permissions from config file
+  const permissions = await resolvePermissions(
+    user.role,
+    user.sipUser ?? user.sipUsers?.[0],
+    user.userId?.toString()
+  );
 
   const session: Session = {
     token,

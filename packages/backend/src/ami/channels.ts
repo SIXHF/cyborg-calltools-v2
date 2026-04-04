@@ -78,77 +78,27 @@ function parseTrunkPeers(output: string): Set<string> {
 }
 
 /**
- * Send an AMI Command action and return the command output.
+ * Run an Asterisk CLI command via subprocess (same approach as V1).
+ * This is more reliable than the AMI Command action whose response
+ * format varies across Asterisk versions.
  */
-async function amiCommand(command: string): Promise<string> {
-  const ami = getAmiClient();
-  if (!ami) return '';
-
-  return new Promise((resolve) => {
-    const actionId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    let output = '';
-    let resolved = false;
-
-    const timeout = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        ami.removeListener('response', handler);
-        ami.removeListener('ami_event', eventHandler);
-        resolve(output);
-      }
-    }, 10_000);
-
-    const handler = (evt: AmiEvent) => {
-      if (evt.actionid === actionId) {
-        // CommandResponse includes output in the response
-        if (evt.output) output += evt.output + '\n';
-        if (evt.response) {
-          // For multi-line responses, output comes in separate events
-          // The response event signals we can resolve
-          if (!evt.output) {
-            // Wait a bit for CommandOutput events
-            setTimeout(() => {
-              if (!resolved) {
-                resolved = true;
-                clearTimeout(timeout);
-                ami.removeListener('response', handler);
-                ami.removeListener('ami_event', eventHandler);
-                resolve(output);
-              }
-            }, 200);
-          } else {
-            if (!resolved) {
-              resolved = true;
-              clearTimeout(timeout);
-              ami.removeListener('response', handler);
-              ami.removeListener('ami_event', eventHandler);
-              resolve(output);
-            }
-          }
-        }
-      }
-    };
-
-    // CommandOutput events carry individual lines
-    const eventHandler = (evt: AmiEvent) => {
-      if (evt.actionid === actionId && evt.event === 'CommandOutput') {
-        output += (evt.output ?? '') + '\n';
-      }
-      if (evt.actionid === actionId && evt.event === 'CommandComplete') {
-        if (!resolved) {
-          resolved = true;
-          clearTimeout(timeout);
-          ami.removeListener('response', handler);
-          ami.removeListener('ami_event', eventHandler);
-          resolve(output);
-        }
-      }
-    };
-
-    ami.on('response', handler);
-    ami.on('ami_event', eventHandler);
-    ami.sendAction('Command', { Command: command, ActionID: actionId });
-  });
+async function asteriskCommand(command: string): Promise<string> {
+  try {
+    const proc = Bun.spawn(['/usr/sbin/asterisk', '-rx', command], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const output = await new Response(proc.stdout).text();
+    const exitCode = await proc.exited;
+    if (exitCode !== 0) {
+      const stderrText = await new Response(proc.stderr).text();
+      console.error(`[Channels] asterisk -rx "${command}" exited ${exitCode}: ${stderrText}`);
+    }
+    return output;
+  } catch (err) {
+    console.error(`[Channels] asterisk -rx "${command}" failed:`, err);
+    return '';
+  }
 }
 
 /**
@@ -161,8 +111,12 @@ export async function getActiveChannels(useCache = false): Promise<RawChannel[]>
   }
 
   try {
-    const output = await amiCommand('core show channels concise');
-    channelCache = parseConciseChannels(output);
+    const output = await asteriskCommand('core show channels concise');
+    const parsed = parseConciseChannels(output);
+    if (parsed.length !== channelCache.length) {
+      console.log(`[Channels] Channel count changed: ${channelCache.length} -> ${parsed.length}`);
+    }
+    channelCache = parsed;
     channelCacheTime = now;
   } catch (err) {
     console.error('[Channels] Failed to get channels:', err);
@@ -181,7 +135,7 @@ export async function refreshTrunkPeers(): Promise<Set<string>> {
   }
 
   try {
-    const output = await amiCommand('sip show peers');
+    const output = await asteriskCommand('sip show peers');
     trunkNames = parseTrunkPeers(output);
     trunkCacheTime = now;
   } catch (err) {
@@ -353,10 +307,16 @@ export function startChannelPolling(intervalMs = 3000): void {
   // Set up AMI event listeners for answer time tracking
   setupAmiEventListeners();
 
+  // Log first poll to confirm it works
+  let firstPoll = true;
   pollInterval = setInterval(async () => {
     try {
       if (onChannelUpdate) {
         const channels = await getActiveChannels();
+        if (firstPoll) {
+          console.log(`[Channels] First poll: ${channels.length} channels found`);
+          firstPoll = false;
+        }
         onChannelUpdate(channels);
       }
     } catch (err) {

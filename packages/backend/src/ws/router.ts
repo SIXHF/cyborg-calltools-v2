@@ -140,6 +140,12 @@ async function handleGetChannels(ws: ServerWebSocket<any>, session: SessionInfo,
   }
 
   const formatted = formatChannelsForClient(userChannels, allChannels);
+
+  // Debug: log channel counts on first request per session
+  if (allChannels.length > 0 || userChannels.length > 0) {
+    console.log(`[Router] get_channels for ${session.username} (${session.role}): raw=${allChannels.length} filtered=${userChannels.length} formatted=${formatted.length}`);
+  }
+
   send(ws, { type: 'channel_update', channels: formatted });
 }
 
