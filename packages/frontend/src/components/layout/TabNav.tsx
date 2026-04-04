@@ -5,22 +5,28 @@ interface Tab {
   id: TabId;
   label: string;
   adminOnly?: boolean;
+  permissionKey?: string;
 }
 
 const TABS: Tab[] = [
   { id: 'monitor', label: 'Monitor' },
   { id: 'tools', label: 'Tools' },
-  { id: 'history', label: 'History' },
+  { id: 'history', label: 'History', permissionKey: 'cdr' },
   { id: 'settings', label: 'Settings' },
-  { id: 'billing', label: 'Billing' },
+  { id: 'billing', label: 'Billing', permissionKey: 'billing' },
   { id: 'admin', label: 'Admin', adminOnly: true },
 ];
 
 export function TabNav() {
   const { activeTab, setActiveTab } = useUiStore();
-  const { isAdmin } = useAuth();
+  const { isAdmin, permissions } = useAuth();
 
-  const visibleTabs = TABS.filter((tab) => !tab.adminOnly || isAdmin);
+  const visibleTabs = TABS.filter((tab) => {
+    if (tab.adminOnly && !isAdmin) return false;
+    // Hide tabs based on permissions (unless admin)
+    if (tab.permissionKey && !isAdmin && (permissions as any)[tab.permissionKey] === false) return false;
+    return true;
+  });
 
   return (
     <nav

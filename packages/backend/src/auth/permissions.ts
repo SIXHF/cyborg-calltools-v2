@@ -57,9 +57,12 @@ export async function resolvePermissions(
     Object.assign(perms, config.admin_restrictions[sipUser]);
   }
 
-  // User-level restrictions for their SIP users
+  // User-level restrictions for their SIP users (can only BLOCK, not re-enable — V1 parity)
   if (userId && sipUser && config.user_restrictions?.[userId]?.[sipUser]) {
-    Object.assign(perms, config.user_restrictions[userId][sipUser]);
+    const userRest = config.user_restrictions[userId][sipUser];
+    for (const [key, val] of Object.entries(userRest)) {
+      if (!val) (perms as any)[key] = false;
+    }
   }
 
   return perms as unknown as Record<string, boolean>;

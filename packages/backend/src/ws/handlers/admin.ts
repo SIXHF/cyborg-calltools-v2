@@ -242,12 +242,43 @@ export async function handleSetPermissions(
       return;
     }
 
-    // Store under admin_restrictions for SIP users
     if (!config.admin_restrictions) config.admin_restrictions = {};
-    config.admin_restrictions[target] = permissions;
+
+    // Check if target is a user account (cascade to SIP users like V1)
+    const userRows = await dbQuery<any>('SELECT id FROM pkg_user WHERE username = ? LIMIT 1', [target]);
+    if (userRows.length > 0) {
+      // It's a user account — cascade to all their SIP users
+      if (!config.user_account_restrictions) config.user_account_restrictions = {};
+      config.user_account_restrictions[target] = permissions;
+
+      const sipRows = await dbQuery<any>('SELECT name FROM pkg_sip WHERE id_user = ?', [userRows[0].id]);
+      for (const sr of sipRows) {
+        config.admin_restrictions[sr.name] = { ...permissions };
+      }
+      auditLog(session.username, session.role, session.ip, 'set_permissions', target, `cascaded to ${sipRows.length} SIP users`);
+    } else {
+      // It's a SIP user — set directly
+      config.admin_restrictions[target] = permissions;
+      auditLog(session.username, session.role, session.ip, 'set_permissions', target, JSON.stringify(permissions));
+    }
 
     await writeFile(PERMISSIONS_FILE, JSON.stringify(config, null, 2));
-    auditLog(session.username, session.role, session.ip, 'set_permissions', target, JSON.stringify(permissions));
+
+    // Real-time broadcast: update affected clients' permissions (V1 parity)
+    const sessions = getActiveSessions();
+    for (const s of sessions) {
+      const sipUser = s.sipUser ?? (s.sipUsers?.[0]);
+      // Check if this session is affected
+      const affected = s.sipUser === target || s.sipUsers?.includes(target) || s.username === target;
+      if (affected && s.ws) {
+        const newPerms = await resolvePermissions(s.role, sipUser, s.userId?.toString());
+        s.permissions = newPerms;
+        try {
+          (s.ws as any).send(JSON.stringify({ type: 'permissions_updated', permissions: newPerms }));
+        } catch {}
+      }
+    }
+
     // Return full config so admin UI refreshes
     send(ws, { type: 'permissions_data', config });
   } catch (err) {
