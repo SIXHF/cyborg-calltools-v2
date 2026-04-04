@@ -202,6 +202,11 @@ export async function handleGetPermissions(
   try {
     const raw = await readFile(PERMISSIONS_FILE, 'utf-8');
     const config = JSON.parse(raw);
+    // Include full SIP user list for the permissions dropdown
+    const allSips = await dbQuery<any>('SELECT name FROM pkg_sip ORDER BY name');
+    const allUsers = await dbQuery<any>('SELECT username FROM pkg_user WHERE active = 1 ORDER BY username');
+    config._allSipUsers = allSips.map((s: any) => s.name);
+    config._allUserAccounts = allUsers.map((u: any) => u.username);
     send(ws, { type: 'permissions_data', config });
   } catch {
     send(ws, { type: 'permissions_data', config: {} });

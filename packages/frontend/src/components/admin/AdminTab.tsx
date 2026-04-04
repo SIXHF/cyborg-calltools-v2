@@ -80,13 +80,17 @@ function StatsDashboard() {
                 <div className="text-sm font-semibold text-ct-accent">{name} <span className="text-ct-muted text-xs font-normal">({group.type})</span></div>
                 <div className="flex flex-wrap gap-2 mt-1">
                   {group.trunks.map((t: any, i: number) => (
-                    <span key={i} className="text-xs font-mono bg-ct-bg px-2 py-0.5 rounded border border-ct-border-solid">
-                      {t.name}{t.balance != null && (
-                        <span style={{ color: t.balance < 10 ? '#f85149' : t.balance < 50 ? '#d29922' : '#3fb950', marginLeft: 4 }}>
-                          (${t.balance.toFixed(2)})
+                    <div key={i} className="text-center">
+                      <span className="text-xs font-mono text-ct-text-secondary">{t.name}</span>
+                      {t.balance != null && (
+                        <span className="text-[11px] font-semibold ml-1" style={{ color: t.balance >= 200 ? '#3fb950' : t.balance >= 100 ? '#d29922' : '#f85149' }}>
+                          ${t.balance.toFixed(2)}
                         </span>
                       )}
-                    </span>
+                      {i < group.trunks.length - 1 && (
+                        <div className="text-ct-muted text-[10px]">&#9660;</div>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>
@@ -106,7 +110,7 @@ function StatsDashboard() {
                     <td className="font-mono text-ct-accent">{t.trunk_name}</td>
                     <td className="font-mono">{t.total}</td>
                     <td className="font-mono text-ct-green">{t.answered}</td>
-                    <td><span className={`tag ${t.asr >= 50 ? 'tag-up' : t.asr >= 20 ? 'tag-ring' : 'tag-down'}`}>{t.asr}%</span></td>
+                    <td><span className={`tag ${t.asr >= 50 ? 'tag-up' : t.asr >= 25 ? 'tag-ring' : 'tag-down'}`}>{t.asr}%</span></td>
                   </tr>
                 ))}
               </tbody>
@@ -365,8 +369,10 @@ function PermissionsPanel() {
   useEffect(() => {
     if (permMsg?.config) {
       setConfig(permMsg.config);
-      const sips = Object.keys(permMsg.config.admin_restrictions || {});
-      setSipList(sips);
+      // Use the full SIP user list from backend (not just admin_restrictions keys)
+      const allSips = permMsg.config._allSipUsers || Object.keys(permMsg.config.admin_restrictions || {});
+      const allAccounts = permMsg.config._allUserAccounts || [];
+      setSipList([...allAccounts.map((a: string) => `account:${a}`), ...allSips]);
       // Refresh current target if set
       if (selectedTarget && permMsg.config.admin_restrictions?.[selectedTarget]) {
         setTargetPerms({ ...permMsg.config.defaults, ...permMsg.config.admin_restrictions[selectedTarget] });

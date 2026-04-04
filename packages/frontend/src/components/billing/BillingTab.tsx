@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { useAuthStore } from '../../stores/authStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { useWsMessage } from '../../hooks/useWsMessage';
 
@@ -25,10 +26,13 @@ export function BillingTab() {
   const paymentMsg = useWsMessage<any>('payment_created');
   const errorMsg = useWsMessage<any>('error');
 
+  const selectedSip = useAuthStore(s => s.selectedSipUser);
+
+  // Re-fetch when SIP user changes
   useEffect(() => {
     wsSend({ cmd: 'get_balance' });
     wsSend({ cmd: 'get_refill_history', page: 1, perPage: 25 });
-  }, []);
+  }, [selectedSip]);
 
   useEffect(() => { if (balanceMsg) setBalance(balanceMsg.balance); }, [balanceMsg]);
   useEffect(() => {
