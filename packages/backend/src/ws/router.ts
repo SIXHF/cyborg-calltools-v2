@@ -21,6 +21,7 @@ import { handleStartListening as handleDtmfStart, handleStopListening as handleD
 import { handleCreatePayment } from './handlers/payment';
 import { handleListAudio, handleUploadAudio, handlePlayAudio, handleStopAudio, handleDeleteAudio, cleanupAudioState } from './handlers/audio';
 import { enrichChannels } from '../services/enrichment';
+import { handleGetMoh, handleSetMoh, handleUploadMoh, handleDeleteMoh } from './handlers/moh';
 import {
   handleGetStats,
   handleGetPermissions,
@@ -146,6 +147,24 @@ export async function routeMessage(
 
     case 'transfer_call':
       await handleTransferCall(ws, session, msg as any, send);
+      break;
+
+    // MOH commands
+    case 'get_moh':
+      if (!session.permissions.moh) { send(ws, { type: 'error', message: 'MOH not permitted.', code: 'FORBIDDEN' }); return; }
+      await handleGetMoh(ws, session, msg as any, send);
+      break;
+    case 'set_moh':
+      if (!session.permissions.moh) { send(ws, { type: 'error', message: 'MOH not permitted.', code: 'FORBIDDEN' }); return; }
+      await handleSetMoh(ws, session, msg as any, send);
+      break;
+    case 'upload_moh':
+      if (!session.permissions.moh) { send(ws, { type: 'error', message: 'MOH not permitted.', code: 'FORBIDDEN' }); return; }
+      await handleUploadMoh(ws, session, msg as any, send);
+      break;
+    case 'delete_moh':
+      if (!session.permissions.moh) { send(ws, { type: 'error', message: 'MOH not permitted.', code: 'FORBIDDEN' }); return; }
+      await handleDeleteMoh(ws, session, msg as any, send);
       break;
 
     case 'get_sip_usage':

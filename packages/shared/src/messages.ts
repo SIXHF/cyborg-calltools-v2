@@ -134,6 +134,20 @@ export const GetSessionsMessage = z.object({
   cmd: z.literal('get_sessions'),
 });
 
+// MOH commands
+export const GetMohMessage = z.object({ cmd: z.literal('get_moh'), targetSip: z.string().optional() });
+export const SetMohMessage = z.object({ cmd: z.literal('set_moh'), targetSip: z.string(), filename: z.string().optional(), useDefault: z.boolean().optional() });
+export const UploadMohMessage = z.object({ cmd: z.literal('upload_moh'), targetSip: z.string(), filename: z.string(), data: z.string() });
+export const DeleteMohMessage = z.object({ cmd: z.literal('delete_moh'), targetSip: z.string(), filename: z.string() });
+
+// Admin IP restrictions
+export const AdminGetIpRestrictionsMessage = z.object({ cmd: z.literal('admin_get_ip_restrictions') });
+export const AdminSetIpRestrictionsMessage = z.object({ cmd: z.literal('admin_set_ip_restrictions'), targetType: z.enum(['users', 'sip_users']), targetName: z.string(), ips: z.array(z.string()) });
+
+// Admin rate limits
+export const AdminGetRateLimitsMessage = z.object({ cmd: z.literal('admin_get_rate_limits') });
+export const AdminSetRateLimitWhitelistMessage = z.object({ cmd: z.literal('admin_set_rate_limit_whitelist'), action: z.enum(['add', 'remove']), ip: z.string() });
+
 export const SetGlobalSettingsMessage = z.object({
   cmd: z.literal('set_global_settings'),
   key: z.string().min(1),
@@ -231,6 +245,14 @@ export const ClientMessage = z.discriminatedUnion('cmd', [
   GetUsersOverviewMessage,
   GetPermissionsMessage,
   GetSessionsMessage,
+  GetMohMessage,
+  SetMohMessage,
+  UploadMohMessage,
+  DeleteMohMessage,
+  AdminGetIpRestrictionsMessage,
+  AdminSetIpRestrictionsMessage,
+  AdminGetRateLimitsMessage,
+  AdminSetRateLimitWhitelistMessage,
   SetGlobalSettingsMessage,
   GetAuditLogMessage,
   AddCreditMessage,
@@ -287,5 +309,15 @@ export type ServerMessage =
   | { type: 'transfer_initiated'; channel: string; destination: string; transferType: string }
   | { type: 'audit_log'; lines: string[] }
   | { type: 'sip_info'; extensions: Array<{ name: string; callerid: string; host: string; codecs: string; secret: string; registered: boolean }> }
+  | { type: 'moh_info'; using_default: boolean; moh_class: string; files: Array<{ name: string; size: number }> }
+  | { type: 'moh_updated'; using_default: boolean; moh_class: string; files: Array<{ name: string; size: number }> }
+  | { type: 'ip_restrictions_list'; restrictions: Record<string, any> }
+  | { type: 'ip_restrictions_updated'; targetType: string; targetName: string; ips: string[] }
+  | { type: 'rate_limits_list'; rateLimits: any[]; whitelist: string[]; maxAttempts: number; windowSeconds: number }
+  | { type: 'rate_limit_cleared'; rateKey: string; clearAll: boolean }
+  | { type: 'rate_whitelist_updated'; whitelist: string[] }
+  | { type: 'transcript_started'; channel: string; callerName: string; calleeName: string; backend: string }
+  | { type: 'transcript_stopped'; lines: any[] }
+  | { type: 'transcript_slots'; active: number; max: number }
   | { type: 'error'; message: string; code?: string }
   | { type: 'pong' };
