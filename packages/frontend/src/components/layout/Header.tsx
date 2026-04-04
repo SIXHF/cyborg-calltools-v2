@@ -21,7 +21,14 @@ export function Header() {
 
   // Fetch balance on mount and when SIP user changes
   useEffect(() => {
-    if (showBalance) wsSend({ cmd: 'get_balance' });
+    if (!showBalance) return;
+    const params: any = { cmd: 'get_balance' };
+    if (selectedSip?.startsWith('account:')) {
+      params.targetAccount = selectedSip.slice('account:'.length);
+    } else if (selectedSip) {
+      params.targetSip = selectedSip;
+    }
+    wsSend(params);
   }, [showBalance, selectedSip]);
 
   const balance = balanceMsg?.balance;
