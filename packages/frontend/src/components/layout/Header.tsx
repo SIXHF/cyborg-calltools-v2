@@ -41,7 +41,7 @@ export function Header() {
   };
 
   return (
-    <header className="header-gradient px-3 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between sticky top-0 z-[60] flex-wrap gap-2">
+    <header className="header-gradient flex items-center justify-between sticky top-0 z-[60] flex-wrap gap-2" style={{ padding: '14px 24px' }}>
       <div className="flex items-center gap-4">
         <h1 className="text-xl font-semibold text-ct-accent tracking-wide">
           Call Tools <span className="beta-badge">BETA</span>{' '}

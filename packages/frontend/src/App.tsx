@@ -57,7 +57,7 @@ export function App() {
     <div className="min-h-screen flex flex-col">
       <Header />
       <TabNav />
-      <main className="flex-1 p-4 max-w-7xl mx-auto w-full">
+      <main className="flex-1 mx-auto w-full" style={{ maxWidth: 1000, padding: '24px', paddingBottom: '60px' }}>
         {activeTab === 'monitor' && <MonitorTab />}
         {activeTab === 'tools' && <ToolsTab />}
         {activeTab === 'history' && <HistoryTab />}

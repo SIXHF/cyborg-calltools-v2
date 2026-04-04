@@ -15,14 +15,14 @@ export function Toast() {
       aria-live="polite"
     >
       <div
-        className={`px-4 py-2.5 rounded-lg text-[13px] font-medium shadow-lg border ${
+        className={`py-2.5 rounded-lg text-[13px] font-medium shadow-lg border ${
           latest.type === 'error'
             ? 'bg-[#1a1117] border-ct-red text-ct-red'
             : latest.type === 'success'
             ? 'bg-ct-surface-solid border-ct-green text-ct-green'
             : 'bg-ct-surface-solid border-ct-accent text-ct-text'
         }`}
-        style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+        style={{ padding: '10px 18px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
         role="alert"
       >
         <span className="mr-2">{latest.message}</span>

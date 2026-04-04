@@ -23,7 +23,8 @@ export function EventLogDrawer() {
     >
       {/* Header */}
       <div
-        className="flex items-center justify-between px-4 py-2 cursor-pointer select-none border-b border-ct-border-solid"
+        className="flex items-center justify-between cursor-pointer select-none border-b border-ct-border-solid"
+        style={{ padding: '8px 18px' }}
         onClick={() => setExpanded(!expanded)}
       >
         <h3 className="text-xs font-semibold text-ct-muted tracking-wider">EVENT LOG</h3>
@@ -46,8 +47,8 @@ export function EventLogDrawer() {
 
       {/* Log entries */}
       <div
-        className="overflow-y-auto px-4 py-1.5 font-mono text-xs text-ct-muted"
-        style={{ maxHeight: 170 }}
+        className="overflow-y-auto font-mono text-xs text-ct-muted"
+        style={{ padding: '6px 18px', maxHeight: 170 }}
       >
         {eventLog.length === 0 ? (
           <div className="text-ct-muted-dark py-2">[--:--:--] Waiting for connection...</div>

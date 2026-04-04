@@ -423,6 +423,29 @@
 @media (max-width: 480px) {
   .channel-row { padding: 8px 12px; }
   .panel-header { padding: 10px 12px; flex-wrap: wrap; gap: 8px; }
+  .panel-header h2 { font-size: 14px; }
   .agent-badge { font-size: 11px; }
   .btn-call-action { font-size: 10px !important; padding: 3px 8px !important; }
+
+  /* V1 480px: channel mobile adjustments */
+  .channel-top { gap: 6px; flex-wrap: wrap; }
+  .channel-bottom { flex-wrap: wrap; gap: 6px; }
+  .channel-actions { flex-wrap: wrap; gap: 4px; }
+
+  /* V1 480px: stat cards */
+  .stat-card-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 6px !important; padding: 10px 12px !important; }
+
+  /* V1 480px: toast */
+  .toast-container { bottom: 48px !important; right: 12px !important; left: 12px !important; }
+
+  /* V1 480px: modal */
+  .modal-box { margin: 10px; padding: 16px; border-radius: 12px; }
+}
+
+/* V1 768px tablet rules (V1 lines 867-891) */
+@media (max-width: 768px) {
+  .channel-row { padding: 10px 14px; }
+  .panel-header { padding: 12px 14px; }
+  .channel-section-header { padding: 8px 14px 4px; }
+  .modal-box { margin: 16px; max-width: calc(100vw - 32px); padding: 18px; }
 }
