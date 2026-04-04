@@ -184,7 +184,7 @@ export async function createSession(
   return session;
 }
 
-export function resumeSession(token: string, clientIp: string): Session | null {
+export function resumeSession(token: string, clientIp: string, ws?: ServerWebSocket<unknown>): Session | null {
   if (invalidatedTokens.has(token)) return null;
 
   const session = disconnectedSessions.get(token);
@@ -199,9 +199,10 @@ export function resumeSession(token: string, clientIp: string): Session | null {
   // Check IP pinning
   if (session.ip !== clientIp) return null;
 
-  // Move back to active
+  // Move back to active and re-attach WebSocket
   disconnectedSessions.delete(token);
   session.disconnectedAt = undefined;
+  if (ws) session.ws = ws;
   activeSessions.set(token, session);
 
   return session;

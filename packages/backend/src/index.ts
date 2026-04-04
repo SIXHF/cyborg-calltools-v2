@@ -221,7 +221,7 @@ const server = Bun.serve({
 
       // Handle resume
       if (msg.cmd === 'resume') {
-        const session = resumeSession(msg.token, clientIp);
+        const session = resumeSession(msg.token, clientIp, ws);
         if (!session) {
           send(ws, { type: 'resume_failed', reason: 'Session expired or invalid.' });
           return;
