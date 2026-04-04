@@ -130,6 +130,22 @@ export async function handleSetPermissions(
       config = JSON.parse(raw);
     } catch {}
 
+    // Handle special targets
+    if (target === '__access_control__') {
+      // Direct update to allowed_accounts
+      const { action, account } = permissions as any;
+      if (!config.allowed_accounts) config.allowed_accounts = [];
+      if (action === 'add' && account && !config.allowed_accounts.includes(account)) {
+        config.allowed_accounts.push(account);
+      } else if (action === 'remove' && account) {
+        config.allowed_accounts = config.allowed_accounts.filter((a: string) => a !== account);
+      }
+      await writeFile(PERMISSIONS_FILE, JSON.stringify(config, null, 2));
+      auditLog(session.username, session.role, session.ip, 'set_access', account, action);
+      send(ws, { type: 'permissions_data', config });
+      return;
+    }
+
     // Store under admin_restrictions for SIP users
     if (!config.admin_restrictions) config.admin_restrictions = {};
     config.admin_restrictions[target] = permissions;
@@ -154,6 +170,7 @@ export async function handleGetSessions(
     sipUser: s.sipUser,
     ip: s.ip,
     connectedAt: s.connectedAt,
+    tokenPrefix: s.token.slice(0, 8),
   }));
   send(ws, { type: 'online_users', users: sessions });
 }
@@ -170,9 +187,20 @@ export async function handleForceLogout(
     return;
   }
 
-  destroySession(targetToken);
-  auditLog(session.username, session.role, session.ip, 'force_logout', targetToken);
-  send(ws, { type: 'admin_broadcast', message: 'User forcefully logged out.', from: session.username });
+  // Support both full token and 8-char prefix
+  const allSessions = getActiveSessions();
+  const target = allSessions.find(s =>
+    s.token === targetToken || s.token.startsWith(targetToken)
+  );
+
+  if (!target) {
+    send(ws, { type: 'error', message: 'Session not found.', code: 'NOT_FOUND' });
+    return;
+  }
+
+  destroySession(target.token);
+  auditLog(session.username, session.role, session.ip, 'force_logout', target.username);
+  send(ws, { type: 'admin_broadcast', message: `${target.username} was forcefully logged out.`, from: session.username });
 }
 
 export async function handleBroadcast(

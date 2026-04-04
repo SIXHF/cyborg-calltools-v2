@@ -37,6 +37,12 @@ interface SessionInfo {
   userId?: number;
 }
 
+/** Callback for broadcasting to all clients */
+let broadcastFn: ((msg: any) => void) | null = null;
+export function setBroadcastFunction(fn: (msg: any) => void) {
+  broadcastFn = fn;
+}
+
 /**
  * Route authenticated messages to their handlers.
  */
@@ -179,7 +185,7 @@ export async function routeMessage(
         send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' });
         return;
       }
-      await handleBroadcast(ws, session, msg as any, send);
+      await handleBroadcast(ws, session, msg as any, send, broadcastFn ?? undefined);
       break;
 
     case 'admin_clear_rate_limit':

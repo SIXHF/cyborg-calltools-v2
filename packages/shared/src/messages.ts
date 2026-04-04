@@ -116,7 +116,7 @@ export const AdminSetPermissionsMessage = z.object({
 
 export const AdminForceLogoutMessage = z.object({
   cmd: z.literal('admin_force_logout'),
-  targetToken: z.string().length(64),
+  targetToken: z.string().min(1).max(64),
 });
 
 export const AdminBroadcastMessage = z.object({

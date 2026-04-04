@@ -177,7 +177,7 @@ function SessionsPanel() {
                 <button
                   onClick={() => {
                     if (confirm(`Force logout ${s.username}?`)) {
-                      wsSend({ cmd: 'admin_force_logout', targetToken: s.token || '' });
+                      wsSend({ cmd: 'admin_force_logout', targetToken: s.tokenPrefix || '' });
                     }
                   }}
                   className="btn btn-sm btn-danger"
@@ -308,19 +308,15 @@ function AccessControlPanel() {
 
   const addAccount = () => {
     if (!newAccount.trim() || allowedAccounts.includes(newAccount.trim())) return;
-    const updated = [...allowedAccounts, newAccount.trim()];
-    const newConfig = { ...config, allowed_accounts: updated };
-    wsSend({ cmd: 'admin_set_permissions', target: '__config__', permissions: newConfig as any });
-    setNewAccount('');
+    wsSend({ cmd: 'admin_set_permissions', target: '__access_control__', permissions: { action: 'add', account: newAccount.trim() } as any });
     // Optimistic update
-    setConfig(newConfig);
+    setConfig({ ...config, allowed_accounts: [...allowedAccounts, newAccount.trim()] });
+    setNewAccount('');
   };
 
   const removeAccount = (name: string) => {
-    const updated = allowedAccounts.filter(a => a !== name);
-    const newConfig = { ...config, allowed_accounts: updated };
-    wsSend({ cmd: 'admin_set_permissions', target: '__config__', permissions: newConfig as any });
-    setConfig(newConfig);
+    wsSend({ cmd: 'admin_set_permissions', target: '__access_control__', permissions: { action: 'remove', account: name } as any });
+    setConfig({ ...config, allowed_accounts: allowedAccounts.filter(a => a !== name) });
   };
 
   return (

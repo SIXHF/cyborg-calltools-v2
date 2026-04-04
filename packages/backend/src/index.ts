@@ -2,7 +2,7 @@ import { type ServerWebSocket } from 'bun';
 import { ClientMessage, type ServerMessage } from '@calltools/shared';
 import { authenticate, resumeSession, createSession, destroySession, getSession, disconnectSession } from './auth/session';
 import { checkRateLimit } from './ws/middleware';
-import { routeMessage } from './ws/router';
+import { routeMessage, setBroadcastFunction } from './ws/router';
 import { auditLog } from './audit/logger';
 import { initAmiClient } from './ami/client';
 import { initDatabase } from './db/mysql';
@@ -56,6 +56,22 @@ function untrackConnection(ws: ServerWebSocket<WsData>) {
     if (conns.size === 0) connectionsByUser.delete(username);
   }
 }
+
+/**
+ * Broadcast any message to all authenticated clients.
+ */
+function broadcastToAll(msg: ServerMessage) {
+  for (const [_, conns] of connectionsByUser) {
+    for (const ws of conns) {
+      if (ws.data.token) {
+        try { send(ws, msg); } catch {}
+      }
+    }
+  }
+}
+
+// Wire up broadcast function for admin broadcast command
+setBroadcastFunction(broadcastToAll);
 
 /**
  * Broadcast channel updates to all authenticated clients.
@@ -206,10 +222,15 @@ const server = Bun.serve({
         }
 
         ws.data.token = session.token;
+        // Send full auth state on resume (V1 parity)
         send(ws, {
-          type: 'resume_ok',
+          type: 'auth_ok',
+          token: session.token,
           username: session.username,
           role: session.role,
+          version: VERSION,
+          permissions: session.permissions as unknown as Record<string, boolean>,
+          sipUsers: session.sipUsers ?? [],
         });
 
         auditLog(session.username, session.role, clientIp, 'session_resume');
