@@ -5,7 +5,7 @@ import { useTranscriptStore } from '../stores/transcriptStore';
 import { useUiStore } from '../stores/uiStore';
 import type { ServerMessage } from '@calltools/shared';
 
-const WS_URL = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_WS_URL) || 'wss://sip.osetec.net:8766';
+const WS_URL = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_WS_URL) || 'wss://sip.osetec.net/beta-ws/';
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 30_000;
 const PING_INTERVAL_MS = 30_000;
