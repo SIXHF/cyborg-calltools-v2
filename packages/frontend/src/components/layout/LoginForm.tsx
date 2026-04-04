@@ -97,7 +97,7 @@ export function LoginForm() {
       </div>
 
       <div
-        className="w-full max-w-[400px]"
+        className="w-full max-w-[380px]"
         style={{
           background: 'rgba(22, 27, 34, 0.85)',
           backdropFilter: 'blur(16px)',
@@ -110,7 +110,8 @@ export function LoginForm() {
         }}
       >
         {/* Auth Tabs */}
-        <div className="flex border-b border-ct-border-solid">
+        {/* V1 line 158-170: auth-tabs with rounded border container */}
+        <div className="flex mx-10 mt-5 mb-0 rounded-lg overflow-hidden border border-ct-border-solid">
           <button
             onClick={() => { setTab('login'); setSignupSuccess(null); }}
             className={`flex-1 py-2.5 text-center text-sm font-semibold transition-colors ${
@@ -129,13 +130,13 @@ export function LoginForm() {
           </button>
         </div>
 
-        <div className="p-8">
+        <div className="p-10">
           {/* ── Login Pane ── */}
           {tab === 'login' && (
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="text-center mb-2">
-                <h2 className="text-lg font-semibold text-ct-text-secondary">Sign In</h2>
-                <p className="text-[13px] text-ct-muted mt-1">Enter your SIP or account credentials</p>
+                <h2 className="text-lg font-semibold text-ct-text-secondary">Log In</h2>
+                <p className="text-[13px] text-ct-muted mt-1">Log in with your SIP, User, or Admin credentials</p>
               </div>
 
               {error && <div className="text-[13px] text-ct-red text-center">{error}</div>}
@@ -148,7 +149,7 @@ export function LoginForm() {
                 <label className="block text-[13px] text-ct-muted mb-1.5">Password</label>
                 <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="form-input" autoComplete="current-password" />
               </div>
-              <button type="submit" className="btn btn-primary btn-lg">Sign In</button>
+              <button type="submit" className="btn btn-primary btn-lg">Log In</button>
               <p className="text-center text-[13px] text-ct-muted mt-3">
                 Don't have an account?{' '}
                 <a href="#" onClick={e => { e.preventDefault(); setTab('signup'); }} className="text-ct-accent hover:underline">Sign Up</a>

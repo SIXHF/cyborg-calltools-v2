@@ -40,6 +40,12 @@ export async function loadPermissions(): Promise<PermissionsConfig> {
   }
 }
 
+/** Invalidate the permission cache — call after writing to the permissions file */
+export function invalidatePermissionCache(): void {
+  cachedConfig = null;
+  cacheTime = 0;
+}
+
 /**
  * Resolve permissions for a specific user/SIP combination.
  * Cascade: defaults → admin_restrictions → user_restrictions

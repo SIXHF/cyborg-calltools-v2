@@ -66,6 +66,9 @@ export function App() {
       )}
       <EventLogDrawer />
       <Toast />
+      <footer className="fixed bottom-0 left-0 w-full text-center py-3 text-xs text-[#555] tracking-wider" style={{ pointerEvents: 'none' }}>
+        Created by L0Ki for Cyborg Telecom
+      </footer>
     </div>
   );
 }

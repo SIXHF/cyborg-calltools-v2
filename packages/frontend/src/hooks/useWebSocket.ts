@@ -181,8 +181,10 @@ function handleMessage(event: MessageEvent) {
       const toastType: 'success' | 'error' | 'info' =
         broadcastColor === 'green' ? 'success' :
         broadcastColor === 'red' ? 'error' : 'info';
-      ui.addToast(`[${msg.from}] ${msg.message}`, toastType, 10000);
+      ui.addToast(`[${msg.from}] ${msg.message}`, toastType, 6000);
       ui.addLogEntry(`Broadcast from ${msg.from}: ${msg.message}`);
+      // Play broadcast alert sound
+      notifBroadcast();
       if ('Notification' in window && Notification.permission === 'granted') {
         new Notification(`CallTools: ${msg.from}`, { body: msg.message });
       }

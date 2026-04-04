@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { useAuthStore } from '../../stores/authStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { useWsMessage } from '../../hooks/useWsMessage';
 
@@ -25,10 +26,13 @@ export function BillingTab() {
   const paymentMsg = useWsMessage<any>('payment_created');
   const errorMsg = useWsMessage<any>('error');
 
+  const selectedSip = useAuthStore(s => s.selectedSipUser);
+
+  // Re-fetch when SIP user changes
   useEffect(() => {
     wsSend({ cmd: 'get_balance' });
     wsSend({ cmd: 'get_refill_history', page: 1, perPage: 25 });
-  }, []);
+  }, [selectedSip]);
 
   useEffect(() => { if (balanceMsg) setBalance(balanceMsg.balance); }, [balanceMsg]);
   useEffect(() => {
@@ -94,7 +98,7 @@ export function BillingTab() {
           <button onClick={() => wsSend({ cmd: 'get_balance' })} className="btn btn-sm">Refresh</button>
         </div>
         <div className="p-6 text-center">
-          <div className="text-4xl font-bold font-mono" style={{ color: balance !== null && balance < 1 ? '#f85149' : '#3fb950' }}>
+          <div className="text-[28px] font-bold font-mono" style={{ color: balance !== null && balance < 1 ? '#f85149' : '#3fb950' }}>
             {balance !== null ? `$${balance.toFixed(2)}` : '—'}
           </div>
           <div className="text-ct-muted text-sm mt-1">USDT Balance</div>
@@ -108,7 +112,7 @@ export function BillingTab() {
         </div>
         <div className="p-4 space-y-3">
           <div className="flex gap-2 flex-wrap">
-            {[50, 100, 250, 500].map(amt => (
+            {[50, 100, 250].map(amt => (
               <button key={amt} onClick={() => setRechargeAmt(String(amt))} className="btn btn-sm">
                 ${amt}
               </button>

@@ -169,6 +169,7 @@ export const AdminBroadcastMessage = z.object({
   cmd: z.literal('admin_broadcast'),
   message: z.string().min(1).max(500),
   color: z.enum(['orange', 'red', 'green']).optional(),
+  targets: z.array(z.string()).optional(),
 });
 
 export const GetSipUsageMessage = z.object({

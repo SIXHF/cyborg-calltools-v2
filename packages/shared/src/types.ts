@@ -63,6 +63,7 @@ export interface Permissions {
   billing: boolean;
   allow_tollfree_callerid: boolean;
   cnam_lookup: boolean;
+  bin_lookup: boolean;
   call_cost: boolean;
 }
 
@@ -78,7 +79,8 @@ export const DEFAULT_PERMISSIONS: Permissions = {
   billing: true,
   allow_tollfree_callerid: true,
   cnam_lookup: true,
-  call_cost: true,
+  bin_lookup: true,
+  call_cost: false,
 };
 
 /** Audio file metadata */

@@ -22,19 +22,7 @@
     border-color: rgba(48, 54, 61, 0.8);
   }
 
-  /* Scrollbar styling */
-  ::-webkit-scrollbar {
-    @apply w-2;
-  }
-  ::-webkit-scrollbar-track {
-    @apply bg-transparent;
-  }
-  ::-webkit-scrollbar-thumb {
-    @apply bg-ct-border-solid rounded-full;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-ct-muted;
-  }
+  /* V1 has no custom scrollbar styling — use browser defaults */
 }
 
 @layer components {

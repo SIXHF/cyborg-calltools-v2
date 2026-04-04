@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useAuthStore } from '../../stores/authStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { useWsMessage } from '../../hooks/useWsMessage';
 
@@ -62,7 +63,7 @@ function StatsDashboard() {
         </div>
 
         {/* Stat Cards — V1 layout */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 p-4">
+        <div className="p-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
           {cards.map(c => (
             <div key={c.label} className="bg-ct-surface-solid border border-ct-border-solid rounded-[10px] p-3.5 text-center overflow-hidden">
               <div className="text-[28px] font-bold font-mono" style={{ color: c.color }}>{c.value}</div>
@@ -75,18 +76,29 @@ function StatsDashboard() {
         {stats.trunk_groups && Object.keys(stats.trunk_groups).length > 0 && (
           <div className="px-4 pb-4">
             <h3 className="text-xs font-semibold text-ct-muted uppercase tracking-wider mb-2">Trunk Failover Groups</h3>
-            {Object.entries(stats.trunk_groups).map(([name, group]: [string, any]) => (
-              <div key={name} className="mb-2 p-3 bg-ct-surface-solid border border-ct-border-solid rounded-lg">
-                <div className="text-sm font-semibold text-ct-accent">{name} <span className="text-ct-muted text-xs font-normal">({group.type})</span></div>
-                <div className="flex flex-wrap gap-2 mt-1">
+            {/* V1: inline-block cards with vertical trunk list and ▼ arrows between */}
+            <div className="flex flex-wrap gap-3">
+              {Object.entries(stats.trunk_groups).map(([name, group]: [string, any]) => (
+                <div key={name} className="inline-block bg-ct-bg border border-ct-border-solid rounded-lg px-4 py-2.5 align-top">
+                  <div className="font-semibold text-ct-accent mb-1.5">{name} <span className="text-ct-muted font-normal text-[11px]">({group.type})</span></div>
                   {group.trunks.map((t: any, i: number) => (
-                    <span key={i} className="text-xs font-mono bg-ct-bg px-2 py-0.5 rounded border border-ct-border-solid">
-                      {t.name}{t.balance != null ? ` ($${t.balance.toFixed(2)})` : ''}
-                    </span>
+                    <div key={i}>
+                      <div className="text-center font-mono text-ct-text-secondary py-0.5">
+                        {t.name}
+                        {t.balance != null && (
+                          <span className="text-[11px] font-semibold ml-1" style={{ color: t.balance >= 200 ? '#3fb950' : t.balance >= 100 ? '#d29922' : '#f85149' }}>
+                            ${t.balance.toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                      {i < group.trunks.length - 1 && (
+                        <div className="text-center text-ct-muted text-[10px]">&#9660;</div>
+                      )}
+                    </div>
                   ))}
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
 
@@ -102,7 +114,7 @@ function StatsDashboard() {
                     <td className="font-mono text-ct-accent">{t.trunk_name}</td>
                     <td className="font-mono">{t.total}</td>
                     <td className="font-mono text-ct-green">{t.answered}</td>
-                    <td><span className={`tag ${t.asr >= 50 ? 'tag-up' : t.asr >= 20 ? 'tag-ring' : 'tag-down'}`}>{t.asr}%</span></td>
+                    <td><span className={`tag ${t.asr >= 50 ? 'tag-up' : t.asr >= 25 ? 'tag-ring' : 'tag-down'}`}>{t.asr}%</span></td>
                   </tr>
                 ))}
               </tbody>
@@ -255,21 +267,36 @@ function UsersOverview() {
               className={`bg-ct-surface-solid border rounded-[10px] p-4 cursor-pointer transition-all ${expandedId === u.id ? 'border-ct-blue' : 'border-ct-border-solid hover:border-ct-border-hover'}`}
               onClick={() => setExpandedId(expandedId === u.id ? null : u.id)}
             >
+              {/* V1 header: username + online dot + role badge */}
               <div className="flex justify-between items-center mb-2">
                 <span className="text-base font-bold text-ct-accent font-mono">{u.username}</span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-[10px] font-semibold uppercase tracking-wider ${
-                  u.role === 'admin' ? 'bg-[#2d1b00] text-ct-yellow' : 'bg-[#1a1040] text-ct-purple-dark'
-                }`}>{u.role}</span>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full inline-block" style={{
+                    background: (u.registeredCount || 0) > 0 ? '#3fb950' : '#484f58',
+                    boxShadow: (u.registeredCount || 0) > 0 ? '0 0 6px #3fb95066' : 'none',
+                  }} />
+                  <span className="text-[11px]" style={{ color: (u.registeredCount || 0) > 0 ? '#3fb950' : '#484f58' }}>
+                    {(u.registeredCount || 0) > 0 ? 'Online' : 'Offline'}
+                  </span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-[10px] font-semibold uppercase tracking-wider ${
+                    u.role === 'admin' ? 'bg-[#2d1b00] text-ct-yellow' : 'bg-[#1a1040] text-ct-purple-dark'
+                  }`}>{u.role}</span>
+                </div>
               </div>
+              {/* V1 stats: SIP X/Y registered, Balance, Last Refill */}
               <div className="grid grid-cols-2 gap-1 text-xs text-ct-muted leading-relaxed">
-                <span>Balance:</span>
-                <span className={`font-medium ${u.credit < 1 ? 'text-ct-red' : 'text-ct-green'}`}>${u.credit.toFixed(2)}</span>
                 <span>SIP Users:</span>
-                <span className="text-ct-text-secondary font-medium">{u.sipCount}</span>
-                {u.lastRefill && <>
-                  <span>Last Refill:</span>
-                  <span className="text-ct-text-secondary">{new Date(u.lastRefill).toLocaleDateString()}{u.lastRefillAmount != null ? ` ($${u.lastRefillAmount.toFixed(2)})` : ''}</span>
-                </>}
+                <span className="text-ct-text-secondary font-medium">{u.registeredCount || 0}/{u.sipCount} registered</span>
+                <span>Balance:</span>
+                <span className="text-ct-green font-medium">${u.credit.toFixed(2)}</span>
+                <div className="col-span-2">
+                  <span className="text-ct-muted">Last Refill: </span>
+                  <span className="text-ct-yellow font-medium">
+                    {u.lastRefill
+                      ? `$${u.lastRefillAmount != null ? u.lastRefillAmount.toFixed(2) : '?'} (${new Date(u.lastRefill).toLocaleDateString()})`
+                      : 'Never'}
+                  </span>
+                </div>
               </div>
 
               {/* Expandable SIP Details */}
@@ -279,6 +306,11 @@ function UsersOverview() {
                     <div key={sip.extension} className="bg-ct-bg border border-ct-border-solid rounded-lg p-2.5">
                       <div className="flex justify-between items-center mb-1">
                         <span className="text-sm font-semibold text-ct-accent font-mono">{sip.extension}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-lg ${
+                          sip.registered ? 'bg-ct-green-bg text-ct-green' : 'bg-ct-red-bg text-ct-red'
+                        }`}>
+                          {sip.registered ? 'Registered' : 'Unregistered'}
+                        </span>
                       </div>
                       <div className="text-[11px] text-ct-muted leading-relaxed">
                         CallerID: {sip.callerid || 'Not set'}<br/>
@@ -361,8 +393,10 @@ function PermissionsPanel() {
   useEffect(() => {
     if (permMsg?.config) {
       setConfig(permMsg.config);
-      const sips = Object.keys(permMsg.config.admin_restrictions || {});
-      setSipList(sips);
+      // Use the full SIP user list from backend (not just admin_restrictions keys)
+      const allSips = permMsg.config._allSipUsers || Object.keys(permMsg.config.admin_restrictions || {});
+      const allAccounts = permMsg.config._allUserAccounts || [];
+      setSipList([...allAccounts.map((a: string) => `account:${a}`), ...allSips]);
       // Refresh current target if set
       if (selectedTarget && permMsg.config.admin_restrictions?.[selectedTarget]) {
         setTargetPerms({ ...permMsg.config.defaults, ...permMsg.config.admin_restrictions[selectedTarget] });
@@ -623,7 +657,7 @@ function saveBroadcastHistory(entries: BroadcastHistoryEntry[]) {
 
 function BroadcastPanel() {
   const [message, setMessage] = useState('');
-  const [color, setColor] = useState<'orange' | 'red' | 'green' | undefined>(undefined);
+  const [color, setColor] = useState<'orange' | 'red' | 'green'>('orange'); // V1 default: orange
   const [history, setHistory] = useState<BroadcastHistoryEntry[]>(loadBroadcastHistory);
   const [sessions, setSessions] = useState<any[]>([]);
   const sessionsMsg = useWsMessage<any>('online_users');
@@ -636,10 +670,21 @@ function BroadcastPanel() {
 
   useEffect(() => { if (sessionsMsg?.users) setSessions(sessionsMsg.users); }, [sessionsMsg]);
 
+  const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
+
+  const toggleTarget = (username: string) => {
+    setSelectedTargets(prev => prev.includes(username) ? prev.filter(u => u !== username) : [...prev, username]);
+  };
+
   const sendBroadcast = () => {
     if (!message.trim()) return;
     const entry: BroadcastHistoryEntry = { timestamp: Date.now(), message: message.trim(), color };
-    wsSend({ cmd: 'admin_broadcast', message: message.trim(), ...(color ? { color } : {}) });
+    wsSend({
+      cmd: 'admin_broadcast',
+      message: message.trim(),
+      ...(color ? { color } : {}),
+      ...(selectedTargets.length > 0 ? { targets: selectedTargets } : {}),
+    });
     const updated = [entry, ...history].slice(0, 20);
     setHistory(updated);
     saveBroadcastHistory(updated);
@@ -683,6 +728,41 @@ function BroadcastPanel() {
               ))}
             </div>
           </div>
+
+          {/* Target Selection */}
+          {sessions.length > 0 && (
+            <div>
+              <label className="block text-[13px] text-ct-muted mb-1.5">Recipients</label>
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={() => setSelectedTargets([])}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                    selectedTargets.length === 0
+                      ? 'bg-ct-blue text-white border-ct-blue'
+                      : 'bg-ct-surface-solid text-ct-muted border-ct-border-solid'
+                  }`}
+                >
+                  All Users
+                </button>
+                {sessions.map((s, i) => (
+                  <button
+                    key={i}
+                    onClick={() => toggleTarget(s.username)}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                      selectedTargets.includes(s.username)
+                        ? 'bg-ct-accent/20 text-ct-accent border-ct-accent'
+                        : 'bg-ct-surface-solid text-ct-muted border-ct-border-solid'
+                    }`}
+                  >
+                    {s.username}
+                  </button>
+                ))}
+              </div>
+              {selectedTargets.length > 0 && (
+                <div className="text-[11px] text-ct-muted-dark mt-1">Sending to: {selectedTargets.join(', ')}</div>
+              )}
+            </div>
+          )}
 
           <button onClick={sendBroadcast} disabled={!message.trim()} className="btn btn-primary">Send Broadcast</button>
         </div>
@@ -751,15 +831,25 @@ function BroadcastPanel() {
 // ── Main Admin Tab ──
 
 export function AdminTab() {
-  const [page, setPage] = useState<AdminPage>('stats');
+  const role = useAuthStore(s => s.role);
+  const isAdmin = role === 'admin';
+  // V1: 'user' role sees only Settings. Admin sees Dashboard/Settings/Broadcast.
+  const defaultPage: AdminPage = isAdmin ? 'stats' : 'settings';
+  const [page, setPage] = useState<AdminPage>(defaultPage);
+
+  const subPages: [AdminPage, string][] = isAdmin
+    ? [['stats', 'Dashboard'], ['settings', 'Settings'], ['broadcast', 'Broadcast']]
+    : [['settings', 'Settings']]; // user role only sees Settings
 
   return (
     <div className="space-y-4 animate-fade-in" role="tabpanel" id="panel-admin">
-      <div className="flex gap-1 overflow-x-auto">
-        {([['stats', 'Dashboard'], ['settings', 'Settings'], ['broadcast', 'Broadcast']] as const).map(([id, label]) => (
-          <button key={id} onClick={() => setPage(id)} className={`tab-btn-v1 ${page === id ? 'active' : ''}`}>{label}</button>
-        ))}
-      </div>
+      {subPages.length > 1 && (
+        <div className="flex gap-1 overflow-x-auto">
+          {subPages.map(([id, label]) => (
+            <button key={id} onClick={() => setPage(id)} className={`tab-btn-v1 ${page === id ? 'active' : ''}`}>{label}</button>
+          ))}
+        </div>
+      )}
 
       {page === 'stats' && <StatsDashboard />}
       {page === 'settings' && (

@@ -33,11 +33,12 @@ interface SipUsageTotals {
   cost: number;
 }
 
+/** V1 format: Xm Ys */
 function formatDuration(seconds: number): string {
-  if (!seconds) return '0:00';
+  if (!seconds) return '0s';
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
 function statusBadge(status: string) {
@@ -104,10 +105,10 @@ function SipUsagePanel() {
             { label: 'Answered', value: totals.answered, color: '#3fb950' },
             { label: 'Failed', value: totals.failed, color: '#f85149' },
             { label: 'Minutes', value: totals.minutes.toFixed(1), color: '#58a6ff' },
-            { label: 'Cost', value: `$${totals.cost.toFixed(4)}`, color: '#d29922' },
+            { label: 'Cost', value: `$${totals.cost.toFixed(2)}`, color: '#d29922' },
           ].map(c => (
             <div key={c.label} className="bg-ct-surface-solid border border-ct-border-solid rounded-[10px] p-3 text-center">
-              <div className="text-xl font-bold font-mono" style={{ color: c.color }}>{c.value}</div>
+              <div className="text-[28px] font-bold font-mono" style={{ color: c.color }}>{c.value}</div>
               <div className="text-[11px] text-ct-muted uppercase tracking-wider mt-1">{c.label}</div>
             </div>
           ))}
@@ -139,9 +140,9 @@ function SipUsagePanel() {
                   <td className="font-mono text-xs text-ct-green">{s.answered}</td>
                   <td className="font-mono text-xs text-ct-red">{s.failed}</td>
                   <td className="font-mono text-xs">{s.minutes.toFixed(1)}</td>
-                  <td className="font-mono text-xs text-ct-yellow">{s.cost > 0 ? `$${s.cost.toFixed(4)}` : '-'}</td>
+                  <td className="font-mono text-xs text-ct-yellow">{s.cost > 0 ? `$${s.cost.toFixed(2)}` : '-'}</td>
                   <td>
-                    <span className={`tag ${s.asr >= 50 ? 'tag-up' : s.asr >= 20 ? 'tag-ring' : 'tag-down'}`}>{s.asr}%</span>
+                    <span className={`tag ${s.asr >= 50 ? 'tag-up' : s.asr >= 25 ? 'tag-ring' : 'tag-down'}`}>{s.asr}%</span>
                   </td>
                 </tr>
               ))}
@@ -195,7 +196,7 @@ function CaptureHistoryPanel() {
     copyToClipboard(parts.join('\n'));
   };
 
-  if (captures.length === 0) return null;
+  // V1 always shows the panel, even when empty
 
   return (
     <div className="glass-panel">
@@ -206,6 +207,9 @@ function CaptureHistoryPanel() {
           <button onClick={clearAll} className="btn btn-sm btn-danger">Clear All</button>
         </div>
       </div>
+      {captures.length === 0 ? (
+        <div className="empty-state">No captures yet. Start listening to DTMF to capture data.</div>
+      ) : (
       <div className="space-y-0">
         {captures.map((c, i) => (
           <div key={c.timestamp + '-' + i} className="p-4 border-b border-ct-border-solid/50 last:border-b-0">
@@ -263,6 +267,7 @@ function CaptureHistoryPanel() {
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 }
@@ -278,12 +283,13 @@ export function HistoryTab() {
   const [dateTo, setDateTo] = useState('');
   const role = useAuthStore(s => s.role);
   const permissions = useAuthStore(s => s.permissions);
+  const selectedSip = useAuthStore(s => s.selectedSipUser);
 
   const cdrMsg = useWsMessage<any>('cdr_result');
 
   useEffect(() => {
     fetchCdr(1);
-  }, []);
+  }, [selectedSip]);
 
   useEffect(() => {
     if (cdrMsg) {
@@ -301,6 +307,7 @@ export function HistoryTab() {
       search: (overrides?.search ?? search) || undefined,
       dateFrom: (overrides?.dateFrom ?? dateFrom) || undefined,
       dateTo: (overrides?.dateTo ?? dateTo) || undefined,
+      targetSip: selectedSip || undefined,
     });
   };
 
@@ -351,9 +358,9 @@ export function HistoryTab() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Time</th>
-                  <th>Source</th>
-                  <th>Destination</th>
+                  <th>Date</th>
+                  <th>From</th>
+                  <th>To</th>
                   <th>Duration</th>
                   <th>Status</th>
                   <th>Cost</th>
@@ -369,10 +376,12 @@ export function HistoryTab() {
                     <td className="font-mono text-xs">{r.destination}</td>
                     <td className="font-mono text-xs">{formatDuration(r.duration)}</td>
                     <td>
-                      <span className={`tag ${statusBadge(r.status)}`}>{r.status}</span>
+                      <span className={r.status === 'answered' ? 'text-ct-green' : r.status === 'busy' ? 'text-ct-yellow' : 'text-ct-red'}>
+                        {r.status === 'answered' ? 'ANSWERED' : r.status === 'busy' ? 'BUSY' : r.status === 'noanswer' ? 'NO ANSWER' : 'FAILED'}
+                      </span>
                     </td>
                     <td className="font-mono text-xs text-ct-yellow">
-                      {r.cost > 0 ? `$${r.cost.toFixed(4)}` : '-'}
+                      {r.cost > 0 ? `$${r.cost.toFixed(2)}` : '-'}
                     </td>
                   </tr>
                 ))}

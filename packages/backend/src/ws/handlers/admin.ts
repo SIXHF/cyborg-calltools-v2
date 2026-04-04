@@ -4,7 +4,7 @@ import { getActiveChannels } from '../../ami/channels';
 import { auditLog } from '../../audit/logger';
 import { getActiveSessions, destroySession } from '../../auth/session';
 import { readFile, writeFile } from 'fs/promises';
-import { resolvePermissions } from '../../auth/permissions';
+import { resolvePermissions, invalidatePermissionCache } from '../../auth/permissions';
 
 type SendFn = (ws: ServerWebSocket<any>, msg: any) => void;
 
@@ -202,6 +202,11 @@ export async function handleGetPermissions(
   try {
     const raw = await readFile(PERMISSIONS_FILE, 'utf-8');
     const config = JSON.parse(raw);
+    // Include full SIP user list for the permissions dropdown
+    const allSips = await dbQuery<any>('SELECT name FROM pkg_sip ORDER BY name');
+    const allUsers = await dbQuery<any>('SELECT username FROM pkg_user WHERE active = 1 ORDER BY username');
+    config._allSipUsers = allSips.map((s: any) => s.name);
+    config._allUserAccounts = allUsers.map((u: any) => u.username);
     send(ws, { type: 'permissions_data', config });
   } catch {
     send(ws, { type: 'permissions_data', config: {} });
@@ -237,6 +242,7 @@ export async function handleSetPermissions(
         config.allowed_accounts = config.allowed_accounts.filter((a: string) => a !== account);
       }
       await writeFile(PERMISSIONS_FILE, JSON.stringify(config, null, 2));
+    invalidatePermissionCache();
       auditLog(session.username, session.role, session.ip, 'set_access', account, action);
       send(ws, { type: 'permissions_data', config });
       return;
@@ -263,6 +269,7 @@ export async function handleSetPermissions(
     }
 
     await writeFile(PERMISSIONS_FILE, JSON.stringify(config, null, 2));
+    invalidatePermissionCache();
 
     // Real-time broadcast: update affected clients' permissions (V1 parity)
     const sessions = getActiveSessions();
@@ -344,13 +351,25 @@ export async function handleBroadcast(
   }
 
   const color = msg.color || undefined;
+  const targets: string[] = msg.targets || []; // array of usernames to target (empty = all)
   auditLog(session.username, session.role, session.ip, 'broadcast', message);
 
-  if (broadcastToAll) {
-    broadcastToAll({ type: 'admin_broadcast', message, from: session.username, ...(color ? { color } : {}) });
-  }
+  const broadcastMsg = { type: 'admin_broadcast', message, from: session.username, ...(color ? { color } : {}) };
 
-  send(ws, { type: 'admin_broadcast', message: `Broadcast sent: "${message}"`, from: 'system' });
+  if (targets.length > 0) {
+    // Targeted broadcast — send only to specific users
+    const sessions = getActiveSessions();
+    let delivered = 0;
+    for (const s of sessions) {
+      if (targets.includes(s.username) && s.ws) {
+        try { (s.ws as any).send(JSON.stringify(broadcastMsg)); delivered++; } catch {}
+      }
+    }
+    send(ws, { type: 'admin_broadcast', message: `Broadcast sent to ${delivered} user(s): "${message}"`, from: 'system' } as any);
+  } else if (broadcastToAll) {
+    broadcastToAll(broadcastMsg);
+    send(ws, { type: 'admin_broadcast', message: `Broadcast sent to all: "${message}"`, from: 'system' } as any);
+  }
 }
 
 export async function handleGetUsersOverview(
@@ -385,19 +404,43 @@ export async function handleGetUsersOverview(
       });
     }
 
-    const result = users.map((u: any) => ({
-      id: u.id,
-      username: u.username,
-      credit: parseFloat(String(u.credit)) || 0,
-      role: u.id_group === 1 ? 'admin' : 'user',
-      sipCount: u.sip_count || 0,
-      active: !!u.active,
-      lastRefill: u.last_refill || null,
-      lastRefillAmount: u.last_refill_amount ? parseFloat(String(u.last_refill_amount)) : null,
-      sipUsers: sipByUser.get(u.id) || [],
-    }));
+    // Get registered SIP peers for online status (V1 parity)
+    let registeredPeers = new Set<string>();
+    try {
+      const proc = Bun.spawn(['/usr/sbin/asterisk', '-rx', 'sip show peers'], { stdout: 'pipe', stderr: 'pipe' });
+      const output = await new Response(proc.stdout).text();
+      await proc.exited;
+      for (const line of output.split('\n')) {
+        if (line.includes('OK') && !line.startsWith('Name')) {
+          const peerName = line.split(/\s+/)[0]?.split('/')[0];
+          if (peerName) registeredPeers.add(peerName);
+        }
+      }
+    } catch {}
 
-    send(ws, { type: 'users_overview', users: result });
+    const result = users.map((u: any) => {
+      const userSips = sipByUser.get(u.id) || [];
+      const registeredCount = userSips.filter((s: any) => registeredPeers.has(s.extension)).length;
+      return {
+        id: u.id,
+        username: u.username,
+        credit: parseFloat(String(u.credit)) || 0,
+        role: u.id_group === 1 ? 'admin' : 'user',
+        sipCount: u.sip_count || 0,
+        registeredCount,
+        active: !!u.active,
+        lastRefill: u.last_refill || null,
+        lastRefillAmount: u.last_refill_amount ? parseFloat(String(u.last_refill_amount)) : null,
+        sipUsers: userSips.map((s: any) => ({ ...s, registered: registeredPeers.has(s.extension) })),
+      };
+    });
+
+    // V1 line 5672-5674: filter out never-refilled users, sort by registered count desc
+    const filtered = result
+      .filter((u: any) => u.lastRefill !== null)
+      .sort((a: any, b: any) => (b.registeredCount || 0) - (a.registeredCount || 0));
+
+    send(ws, { type: 'users_overview', users: filtered });
   } catch (err) {
     console.error('[Admin] Users overview error:', err);
     send(ws, { type: 'error', message: 'Failed to load users.', code: 'DB_ERROR' });
@@ -425,6 +468,7 @@ export async function handleSetGlobalSettings(
     config.defaults[key] = !!value;
 
     await writeFile(PERMISSIONS_FILE, JSON.stringify(config, null, 2));
+    invalidatePermissionCache();
     auditLog(session.username, session.role, session.ip, 'set_global_setting', key, String(value));
 
     // Broadcast updated permissions to ALL connected clients
@@ -506,8 +550,8 @@ export async function handleAddCredit(
   try {
     await dbQuery('UPDATE pkg_user SET credit = credit + ? WHERE id = ?', [amount, targetUserId]);
     await dbQuery(
-      'INSERT INTO pkg_refill (id_user, credit, description, payment, date) VALUES (?, ?, ?, ?, NOW())',
-      [targetUserId, amount, `Manual: ${note}`, `Admin: ${session.username}`]
+      'INSERT INTO pkg_refill (id_user, credit, description, payment, date) VALUES (?, ?, ?, 1, NOW())',
+      [targetUserId, amount, `Manual by ${session.username}: ${note}`]
     );
 
     auditLog(session.username, session.role, session.ip, 'add_credit', String(targetUserId), `${amount} - ${note}`);
