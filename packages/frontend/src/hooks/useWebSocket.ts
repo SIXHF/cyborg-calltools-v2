@@ -41,6 +41,7 @@ function handleMessage(event: MessageEvent) {
         version: msg.version,
         permissions: msg.permissions,
         sipUsers: msg.sipUsers,
+        sipGroups: (msg as any).sipGroups,
       });
       ui.addLogEntry('Authenticated successfully.');
       ui.addToast('Logged in!', 'success', 2000);

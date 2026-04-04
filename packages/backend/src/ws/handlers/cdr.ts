@@ -118,7 +118,55 @@ export async function handleGetSipUsage(
       { answered: 0, failed: 0, total: 0, minutes: 0, cost: 0 }
     );
 
-    send(ws, { type: 'sip_usage_result', stats, totals });
+    // Hourly distribution
+    const hourlyRows = await dbQuery<{ hr: number; cnt: number }>(
+      `SELECT HOUR(starttime) as hr, COUNT(*) as cnt FROM pkg_cdr WHERE ${cdrWhere} GROUP BY HOUR(starttime) ORDER BY hr`,
+      [...cdrParams]
+    );
+    const hourly: number[] = new Array(24).fill(0);
+    for (const row of hourlyRows) {
+      const hr = Number(row.hr);
+      if (hr >= 0 && hr < 24) hourly[hr] = Number(row.cnt || 0);
+    }
+
+    // Top destinations
+    const topDestRows = await dbQuery<{ calledstation: string; cnt: number; dur: number; cost: number }>(
+      `SELECT calledstation, COUNT(*) as cnt, SUM(sessiontime) as dur, SUM(sessionbill) as cost FROM pkg_cdr WHERE ${cdrWhere} GROUP BY calledstation ORDER BY cnt DESC LIMIT 10`,
+      [...cdrParams]
+    );
+    const topDestinations = topDestRows.map(row => ({
+      number: row.calledstation,
+      calls: Number(row.cnt || 0),
+      seconds: Number(row.dur || 0),
+      cost: Math.round(Number(row.cost || 0) * 1000000) / 1000000,
+    }));
+
+    // Map to frontend-expected format
+    const sipUsage = stats.map(s => ({
+      sip_user: s.sipUser,
+      total_calls: s.total,
+      answered: s.answered,
+      failed: s.failed,
+      total_seconds: Math.round(s.minutes * 60),
+      cost: s.cost,
+      success_rate: s.asr,
+    }));
+    const sipTotals = {
+      total_calls: totals.total,
+      answered: totals.answered,
+      failed: totals.failed,
+      total_seconds: Math.round(totals.minutes * 60),
+      total_cost: totals.cost,
+    };
+    send(ws, {
+      type: 'sip_usage_data',
+      sip_usage: sipUsage,
+      totals: sipTotals,
+      hourly,
+      top_destinations: topDestinations,
+      shift_start: dateFrom || new Date().toISOString().slice(0, 10),
+      timestamp: Date.now() / 1000,
+    } as any);
   } catch (err) {
     console.error('[SIP Usage] Query error:', err);
     send(ws, { type: 'error', message: 'Failed to fetch SIP usage.', code: 'DB_ERROR' });

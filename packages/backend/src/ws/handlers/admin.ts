@@ -552,10 +552,14 @@ export async function handleAddCredit(
   }
 
   try {
+    // Get old credit first (V1 includes "Old credit X.XX" in description)
+    const oldRows = await dbQuery<any>('SELECT credit FROM pkg_user WHERE id = ? LIMIT 1', [targetUserId]);
+    const oldCredit = parseFloat(String(oldRows[0]?.credit ?? 0));
+
     await dbQuery('UPDATE pkg_user SET credit = credit + ? WHERE id = ?', [amount, targetUserId]);
     await dbQuery(
       'INSERT INTO pkg_refill (id_user, credit, description, payment, date) VALUES (?, ?, ?, 1, NOW())',
-      [targetUserId, amount, `Manual by ${session.username}: ${note}`]
+      [targetUserId, amount, `Manual: ${note} (by admin ${session.username}), Old credit ${oldCredit.toFixed(2)}`]
     );
 
     auditLog(session.username, session.role, session.ip, 'add_credit', String(targetUserId), `${amount} - ${note}`);

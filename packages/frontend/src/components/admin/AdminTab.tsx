@@ -500,10 +500,13 @@ function PermissionsPanel() {
 function AccessControlPanel() {
   const [config, setConfig] = useState<any>(null);
   const [newAccount, setNewAccount] = useState('');
+  const [allUsers, setAllUsers] = useState<any[]>([]);
   const permMsg = useWsMessage<any>('permissions_data');
+  const usersMsg = useWsMessage<any>('users_overview');
 
-  useEffect(() => { wsSend({ cmd: 'get_permissions' }); }, []);
+  useEffect(() => { wsSend({ cmd: 'get_permissions' }); wsSend({ cmd: 'get_users_overview' }); }, []);
   useEffect(() => { if (permMsg?.config) setConfig(permMsg.config); }, [permMsg]);
+  useEffect(() => { if (usersMsg?.users) setAllUsers(usersMsg.users); }, [usersMsg]);
 
   const allowedAccounts: string[] = config?.allowed_accounts || [];
 
@@ -519,6 +522,9 @@ function AccessControlPanel() {
     setConfig({ ...config, allowed_accounts: allowedAccounts.filter(a => a !== name) });
   };
 
+  // Filter users not already in allowed list
+  const availableUsers = allUsers.filter(u => u.username && !allowedAccounts.includes(u.username) && u.role !== 'admin');
+
   return (
     <div className="glass-panel">
       <div className="panel-header">
@@ -527,9 +533,13 @@ function AccessControlPanel() {
       </div>
       <div className="p-4 border-b border-ct-border-solid">
         <div className="flex gap-2">
-          <input type="text" value={newAccount} onChange={e => setNewAccount(e.target.value)} placeholder="Account username to enable..."
-            className="form-input !text-sm flex-1" onKeyDown={e => e.key === 'Enter' && addAccount()} />
-          <button onClick={addAccount} className="btn btn-sm btn-success">Add</button>
+          <select value={newAccount} onChange={e => setNewAccount(e.target.value)} className="form-input !text-sm flex-1">
+            <option value="">Select account to enable...</option>
+            {availableUsers.map(u => (
+              <option key={u.id || u.username} value={u.username}>{u.username}</option>
+            ))}
+          </select>
+          <button onClick={addAccount} disabled={!newAccount} className="btn btn-sm btn-success">Add</button>
         </div>
         <div className="text-[11px] text-ct-muted-dark mt-2">Admins always have access. Users are denied by default until added here.</div>
       </div>

@@ -3,6 +3,7 @@ import { useChannelStore, type ExtendedChannel } from '../../stores/channelStore
 import { useAuthStore } from '../../stores/authStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { TransferModal } from './TransferModal';
+import { AudioPlayModal } from './AudioPlayModal';
 
 /** Format seconds into mm:ss or hh:mm:ss */
 function formatDuration(seconds: number): string {
@@ -55,7 +56,7 @@ function displayState(state: string, rawState?: string): string {
   }
 }
 
-function ChannelRow({ ch, canDtmf, canTranscript, canAudio, canCost, isAdmin, onTransfer }: {
+function ChannelRow({ ch, canDtmf, canTranscript, canAudio, canCost, isAdmin, onTransfer, onPlay }: {
   ch: ExtendedChannel;
   canDtmf: boolean;
   canTranscript: boolean;
@@ -63,6 +64,7 @@ function ChannelRow({ ch, canDtmf, canTranscript, canAudio, canCost, isAdmin, on
   canCost: boolean;
   isAdmin: boolean;
   onTransfer: (channel: string, sipUser: string) => void;
+  onPlay: (channel: string) => void;
 }) {
   const isUp = ch.state === 'answered';
   const trunk = isAdmin ? ch.trunk : '';
@@ -157,7 +159,7 @@ function ChannelRow({ ch, canDtmf, canTranscript, canAudio, canCost, isAdmin, on
           {isUp && canAudio && (
             <button
               className="btn-call-action btn-play"
-              onClick={() => wsSend({ cmd: 'list_audio' })}
+              onClick={() => onPlay(ch.id)}
               title="Play Audio"
             >
               &#9654; Play
@@ -183,6 +185,7 @@ export function MonitorTab() {
   const selectedSip = useAuthStore(s => s.selectedSipUser);
   const [_, setTick] = useState(0);
   const [transferTarget, setTransferTarget] = useState<{ channel: string; sipUser: string } | null>(null);
+  const [audioPlayChannel, setAudioPlayChannel] = useState<string | null>(null);
 
   const isAdmin = role === 'admin';
   const canDtmf = isAdmin || permissions.dtmf !== false;
@@ -247,6 +250,7 @@ export function MonitorTab() {
                   canCost={canCost}
                   isAdmin={isAdmin}
                   onTransfer={(ch, sip) => setTransferTarget({ channel: ch, sipUser: sip })}
+                  onPlay={(ch) => setAudioPlayChannel(ch)}
                 />
               ))}
             </>
@@ -271,6 +275,7 @@ export function MonitorTab() {
                   canCost={canCost}
                   isAdmin={isAdmin}
                   onTransfer={(ch, sip) => setTransferTarget({ channel: ch, sipUser: sip })}
+                  onPlay={(ch) => setAudioPlayChannel(ch)}
                 />
               ))}
             </>
@@ -284,6 +289,14 @@ export function MonitorTab() {
           channel={transferTarget.channel}
           sipUser={transferTarget.sipUser}
           onClose={() => setTransferTarget(null)}
+        />
+      )}
+
+      {/* Audio Play Modal */}
+      {audioPlayChannel && (
+        <AudioPlayModal
+          channel={audioPlayChannel}
+          onClose={() => setAudioPlayChannel(null)}
         />
       )}
     </div>
