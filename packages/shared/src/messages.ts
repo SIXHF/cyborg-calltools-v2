@@ -76,6 +76,18 @@ export const GetCdrMessage = z.object({
   targetSip: z.string().optional(),
 });
 
+export const TransferCallMessage = z.object({
+  cmd: z.literal('transfer_call'),
+  channel: z.string().min(1),
+  destination: z.string().min(1).max(64),
+  transferType: z.enum(['blind', 'attended']).default('blind'),
+});
+
+export const CreatePaymentMessage = z.object({
+  cmd: z.literal('create_payment'),
+  amount: z.number().min(50).max(10000),
+});
+
 export const GetBalanceMessage = z.object({
   cmd: z.literal('get_balance'),
 });
@@ -96,6 +108,19 @@ export const GetPermissionsMessage = z.object({
 
 export const GetSessionsMessage = z.object({
   cmd: z.literal('get_sessions'),
+});
+
+export const GetAuditLogMessage = z.object({
+  cmd: z.literal('get_audit_log'),
+  actor: z.string().optional(),
+  action: z.string().optional(),
+});
+
+export const AddCreditMessage = z.object({
+  cmd: z.literal('add_credit'),
+  targetUserId: z.number().int(),
+  amount: z.number(),
+  note: z.string().min(1).max(200),
 });
 
 export const GetChannelsMessage = z.object({
@@ -149,6 +174,8 @@ export const ClientMessage = z.discriminatedUnion('cmd', [
   UploadAudioMessage,
   PlayAudioMessage,
   CnamLookupMessage,
+  TransferCallMessage,
+  CreatePaymentMessage,
   GetChannelsMessage,
   GetCdrMessage,
   GetBalanceMessage,
@@ -156,6 +183,8 @@ export const ClientMessage = z.discriminatedUnion('cmd', [
   GetUsersOverviewMessage,
   GetPermissionsMessage,
   GetSessionsMessage,
+  GetAuditLogMessage,
+  AddCreditMessage,
   GetStatsMessage,
   AdminSetPermissionsMessage,
   AdminForceLogoutMessage,

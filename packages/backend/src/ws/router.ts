@@ -11,9 +11,12 @@ import {
 } from '../ami/channels';
 import { handleSetCallerId } from './handlers/callerid';
 import { handleOriginateCall } from './handlers/originate';
+import { handleTransferCall } from './handlers/transfer';
 import { handleGetCdr } from './handlers/cdr';
 import { handleGetBalance, handleGetRefillHistory } from './handlers/billing';
 import { handleCnamLookup } from './handlers/cnam';
+import { handleStartListening as handleDtmfStart, handleStopListening as handleDtmfStop } from './handlers/dtmf';
+import { handleCreatePayment } from './handlers/payment';
 import {
   handleGetStats,
   handleGetPermissions,
@@ -22,6 +25,8 @@ import {
   handleForceLogout,
   handleBroadcast,
   handleGetUsersOverview,
+  handleGetAuditLog,
+  handleAddCredit,
 } from './handlers/admin';
 
 type SendFn = (ws: ServerWebSocket<any>, msg: ServerMessage) => void;
@@ -75,11 +80,15 @@ export async function routeMessage(
       break;
 
     case 'start_listening':
-      await handleStartListening(ws, session, msg, send);
+      if (!session.permissions.dtmf) {
+        send(ws, { type: 'error', message: 'DTMF monitoring not permitted.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleDtmfStart(ws, session, msg as any, send);
       break;
 
     case 'stop_listening':
-      await handleStopListening(ws, session, msg, send);
+      await handleDtmfStop(ws, session, msg as any, send);
       break;
 
     case 'start_transcript':
@@ -104,6 +113,18 @@ export async function routeMessage(
 
     case 'get_cdr':
       await handleGetCdr(ws, session, msg as any, send);
+      break;
+
+    case 'transfer_call':
+      await handleTransferCall(ws, session, msg as any, send);
+      break;
+
+    case 'create_payment':
+      if (!session.permissions.billing) {
+        send(ws, { type: 'error', message: 'Billing access not permitted.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleCreatePayment(ws, session, msg as any, send);
       break;
 
     case 'get_balance':
@@ -188,6 +209,22 @@ export async function routeMessage(
       await handleBroadcast(ws, session, msg as any, send, broadcastFn ?? undefined);
       break;
 
+    case 'get_audit_log':
+      if (session.role !== 'admin') {
+        send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleGetAuditLog(ws, session, msg as any, send);
+      break;
+
+    case 'add_credit':
+      if (session.role !== 'admin') {
+        send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleAddCredit(ws, session, msg as any, send);
+      break;
+
     case 'admin_clear_rate_limit':
       if (session.role !== 'admin') {
         send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' });
@@ -230,22 +267,6 @@ async function handleGetChannels(ws: ServerWebSocket<any>, session: SessionInfo,
 
   const formatted = formatChannelsForClient(userChannels, allChannels);
   send(ws, { type: 'channel_update', channels: formatted });
-}
-
-async function handleStartListening(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {
-  if (!session.permissions.dtmf) {
-    send(ws, { type: 'error', message: 'DTMF monitoring not permitted.', code: 'FORBIDDEN' });
-    auditLog(session.username, session.role, session.ip, 'permission_denied', 'dtmf');
-    return;
-  }
-  auditLog(session.username, session.role, session.ip, 'start_listening', msg.channel);
-  // TODO: Subscribe to AMI DTMF events for this channel's bridge
-  send(ws, { type: 'dtmf_start', channel: msg.channel, sipUser: session.sipUser ?? session.username });
-}
-
-async function handleStopListening(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {
-  auditLog(session.username, session.role, session.ip, 'stop_listening', msg.channel);
-  send(ws, { type: 'dtmf_done', channel: msg.channel });
 }
 
 async function handleStartTranscript(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {

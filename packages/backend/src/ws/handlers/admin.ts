@@ -5,6 +5,8 @@ import { auditLog } from '../../audit/logger';
 import { getActiveSessions, destroySession } from '../../auth/session';
 import { readFile, writeFile } from 'fs/promises';
 
+const AUDIT_LOG_FILE = process.env.AUDIT_LOG_FILE ?? '/opt/calltools-v2-audit.log';
+
 type SendFn = (ws: ServerWebSocket<any>, msg: any) => void;
 
 const PERMISSIONS_FILE = process.env.PERMISSIONS_FILE ?? '/opt/calltools-v2-permissions.json';
@@ -253,5 +255,73 @@ export async function handleGetUsersOverview(
   } catch (err) {
     console.error('[Admin] Users overview error:', err);
     send(ws, { type: 'error', message: 'Failed to load users.', code: 'DB_ERROR' });
+  }
+}
+
+export async function handleGetAuditLog(
+  ws: ServerWebSocket<any>,
+  session: any,
+  msg: any,
+  send: SendFn
+) {
+  try {
+    const raw = await readFile(AUDIT_LOG_FILE, 'utf-8').catch(() => '');
+    const lines = raw.split('\n').filter(l => l.trim()).reverse().slice(0, 200);
+
+    // Apply filters
+    const actorFilter = (msg.actor || '').trim().toLowerCase();
+    const actionFilter = (msg.action || '').trim().toLowerCase();
+
+    const filtered = lines.filter(line => {
+      if (actorFilter && !line.toLowerCase().includes(actorFilter)) return false;
+      if (actionFilter && !line.toLowerCase().includes(actionFilter)) return false;
+      return true;
+    }).slice(0, 100);
+
+    send(ws, { type: 'audit_log' as any, lines: filtered } as any);
+  } catch (err) {
+    send(ws, { type: 'error', message: 'Failed to read audit log.', code: 'FS_ERROR' });
+  }
+}
+
+export async function handleAddCredit(
+  ws: ServerWebSocket<any>,
+  session: any,
+  msg: any,
+  send: SendFn
+) {
+  const targetUserId = parseInt(msg.targetUserId);
+  const amount = parseFloat(msg.amount);
+  const note = (msg.note || '').trim();
+
+  if (!targetUserId || isNaN(amount) || !note) {
+    send(ws, { type: 'error', message: 'Missing target user, amount, or note.', code: 'INVALID_INPUT' });
+    return;
+  }
+
+  try {
+    // Update user credit
+    await dbQuery('UPDATE pkg_user SET credit = credit + ? WHERE id = ?', [amount, targetUserId]);
+
+    // Create refill record
+    await dbQuery(
+      'INSERT INTO pkg_refill (id_user, credit, description, payment, date) VALUES (?, ?, ?, ?, NOW())',
+      [targetUserId, amount, `Manual: ${note}`, `Admin: ${session.username}`]
+    );
+
+    auditLog(session.username, session.role, session.ip, 'add_credit', String(targetUserId), `${amount} - ${note}`);
+
+    // Get updated balance
+    const rows = await dbQuery<any>('SELECT credit FROM pkg_user WHERE id = ? LIMIT 1', [targetUserId]);
+    const newBalance = rows[0]?.credit ?? 0;
+
+    send(ws, {
+      type: 'admin_broadcast' as any,
+      message: `Credit adjusted: $${amount.toFixed(2)} for user #${targetUserId}. New balance: $${parseFloat(String(newBalance)).toFixed(2)}`,
+      from: 'system',
+    } as any);
+  } catch (err) {
+    console.error('[Admin] Add credit error:', err);
+    send(ws, { type: 'error', message: 'Failed to add credit.', code: 'DB_ERROR' });
   }
 }

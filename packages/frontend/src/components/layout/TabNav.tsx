@@ -24,7 +24,7 @@ export function TabNav() {
 
   return (
     <nav
-      className="tab-bar-gradient sticky top-[54px] z-[55] flex items-center gap-1 px-6 py-2"
+      className="tab-bar-gradient sticky top-[54px] z-[55] flex items-center gap-1 px-3 sm:px-6 py-2 overflow-x-auto"
       role="tablist"
       aria-label="Main navigation"
     >

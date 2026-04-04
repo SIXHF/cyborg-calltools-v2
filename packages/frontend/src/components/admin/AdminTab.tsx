@@ -352,6 +352,90 @@ function AccessControlPanel() {
   );
 }
 
+/** Audit Log Viewer */
+function AuditLogPanel() {
+  const [lines, setLines] = useState<string[]>([]);
+  const [actorFilter, setActorFilter] = useState('');
+  const [actionFilter, setActionFilter] = useState('');
+  const auditMsg = useWsMessage<any>('audit_log');
+
+  useEffect(() => { wsSend({ cmd: 'get_audit_log' }); }, []);
+  useEffect(() => { if (auditMsg?.lines) setLines(auditMsg.lines); }, [auditMsg]);
+
+  const doFilter = () => {
+    wsSend({ cmd: 'get_audit_log', actor: actorFilter || undefined, action: actionFilter || undefined });
+  };
+
+  return (
+    <div className="glass-panel">
+      <div className="panel-header">
+        <h2>Audit Log</h2>
+        <button onClick={doFilter} className="btn btn-sm">Refresh</button>
+      </div>
+      <div className="flex gap-2 p-3 border-b border-ct-border-solid flex-wrap items-center">
+        <input type="text" value={actorFilter} onChange={e => setActorFilter(e.target.value)} placeholder="Actor..." className="form-input !py-1.5 !px-2.5 !text-xs !w-28" />
+        <select value={actionFilter} onChange={e => setActionFilter(e.target.value)} className="form-input !py-1.5 !px-2.5 !text-xs !w-36">
+          <option value="">All actions</option>
+          {['login', 'logout', 'login_denied', 'start_listening', 'set_callerid', 'originate_call', 'transfer_call', 'set_permissions', 'force_logout', 'broadcast', 'add_credit'].map(a => (
+            <option key={a} value={a}>{a}</option>
+          ))}
+        </select>
+        <button onClick={doFilter} className="btn btn-sm">Filter</button>
+      </div>
+      <div className="max-h-[400px] overflow-y-auto p-3 font-mono text-xs text-ct-muted space-y-0.5">
+        {lines.length === 0 ? (
+          <div className="empty-state">No audit log entries.</div>
+        ) : (
+          lines.map((line, i) => (
+            <div key={i} className="py-0.5 border-b border-ct-border-solid/20 last:border-b-0">{line}</div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Manual Credit Panel */
+function ManualCreditPanel() {
+  const [targetUserId, setTargetUserId] = useState('');
+  const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
+  const [users, setUsers] = useState<any[]>([]);
+  const usersMsg = useWsMessage<any>('users_overview');
+
+  useEffect(() => { if (usersMsg?.users) setUsers(usersMsg.users); }, [usersMsg]);
+
+  const doAddCredit = () => {
+    const uid = parseInt(targetUserId);
+    const amt = parseFloat(amount);
+    if (!uid || isNaN(amt) || !note.trim()) return;
+    wsSend({ cmd: 'add_credit', targetUserId: uid, amount: amt, note: note.trim() });
+    setAmount('');
+    setNote('');
+  };
+
+  return (
+    <div className="glass-panel">
+      <div className="panel-header">
+        <h2>Manual Credit Adjustment</h2>
+      </div>
+      <div className="p-4 space-y-3">
+        <div className="flex gap-2 items-center flex-wrap">
+          <select value={targetUserId} onChange={e => setTargetUserId(e.target.value)} className="form-input !text-sm !w-48">
+            <option value="">Select user...</option>
+            {users.map(u => <option key={u.id} value={u.id}>{u.username} (${u.credit.toFixed(2)})</option>)}
+          </select>
+          <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="Amount (+/-)" step="0.01" className="form-input !text-sm !w-32 font-mono" />
+        </div>
+        <div className="flex gap-2 items-center">
+          <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Reason / Note (required)" maxLength={200} className="form-input !text-sm flex-1" />
+          <button onClick={doAddCredit} disabled={!targetUserId || !amount || !note.trim()} className="btn btn-primary btn-sm">Apply</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Broadcast Panel */
 function BroadcastPanel() {
   const [message, setMessage] = useState('');
@@ -421,6 +505,8 @@ export function AdminTab() {
           <AccessControlPanel />
           <PermissionsPanel />
           <SessionsPanel />
+          <ManualCreditPanel />
+          <AuditLogPanel />
         </div>
       )}
 
