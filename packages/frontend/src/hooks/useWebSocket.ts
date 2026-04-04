@@ -4,6 +4,7 @@ import { useChannelStore } from '../stores/channelStore';
 import { useTranscriptStore } from '../stores/transcriptStore';
 import { useUiStore } from '../stores/uiStore';
 import type { ServerMessage } from '@calltools/shared';
+import { notifDtmfBeep, notifCallConnect, notifCallHangup, notifBroadcast } from '../utils/audio';
 
 const WS_URL = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_WS_URL) || 'wss://sip.osetec.net/beta-ws/';
 const RECONNECT_BASE_MS = 1000;
@@ -96,6 +97,7 @@ function handleMessage(event: MessageEvent) {
 
     case 'dtmf_digit':
       ui.addLogEntry(`DTMF [${msg.channel}]: ${msg.digit} (${msg.direction})`);
+      notifDtmfBeep();
       window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
       break;
 
