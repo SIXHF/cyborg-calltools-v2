@@ -78,7 +78,7 @@ function ChannelRow({ ch, canDtmf, canTranscript, canAudio, canCost, isAdmin, on
     <div className="channel-row">
       {/* Top row: Agent, State, Duration, Cost, Trunk */}
       <div className="flex items-center gap-2.5 w-full flex-wrap">
-        <span className="text-[15px] font-bold text-ct-accent" style={{ minWidth: 120 }}>{ch.sipUser}</span>
+        <span style={{ background: '#0d2818', color: '#3fb950', padding: '2px 8px', borderRadius: 8, fontSize: 12, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", minWidth: 80, display: 'inline-block' }}>{ch.sipUser}</span>
         <span className={`tag ${stateTagClass(ch.state)}`}>
           {displayState(ch.state, ch.rawState)}
         </span>
