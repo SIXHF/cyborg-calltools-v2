@@ -7,16 +7,89 @@
 import type { ServerWebSocket } from 'bun';
 import { lookupCnam } from './cnam';
 import { checkFraud } from './fraud';
+import { readFile, writeFile } from 'fs/promises';
 
 type SendFn = (ws: ServerWebSocket<any>, msg: any) => void;
 
+// Cache file paths — shared with V1
+const CNAM_CACHE_FILE = '/opt/cnam-cache.json';
+const FRAUD_CACHE_FILE = '/opt/fraud-cache.json';
+
 // CNAM cache: number -> { name, carrier, type, state, city, ts }
 const cnamCache = new Map<string, { name: string; carrier?: string; type?: string; state?: string; city?: string; ts: number }>();
-const CNAM_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+const CNAM_CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days (match V1)
 
 // Fraud cache: number -> { score, ts }
-const fraudCache = new Map<string, { score: number; ts: number }>();
-const FRAUD_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+const fraudCache = new Map<string, { score: number; name?: string; ts: number }>();
+const FRAUD_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+// Load caches from disk on startup
+let cachesLoaded = false;
+async function loadCachesFromDisk() {
+  if (cachesLoaded) return;
+  cachesLoaded = true;
+
+  try {
+    const raw = await readFile(CNAM_CACHE_FILE, 'utf-8');
+    const data = JSON.parse(raw);
+    let count = 0;
+    for (const [num, entry] of Object.entries(data)) {
+      const e = entry as any;
+      cnamCache.set(num, {
+        name: e.caller_name || e.name || '',
+        carrier: e.carrier || '',
+        type: e.carrier_type || e.type || '',
+        state: e.state || '',
+        city: e.city || '',
+        ts: (e.ts || 0) * 1000, // V1 uses seconds, we use ms
+      });
+      count++;
+    }
+    console.log(`[Enrichment] Loaded ${count} CNAM cache entries from disk`);
+  } catch (err) {
+    console.log('[Enrichment] No CNAM cache file found, starting fresh');
+  }
+
+  try {
+    const raw = await readFile(FRAUD_CACHE_FILE, 'utf-8');
+    const data = JSON.parse(raw);
+    let count = 0;
+    for (const [num, entry] of Object.entries(data)) {
+      const e = entry as any;
+      fraudCache.set(num, {
+        score: e.fraud_score ?? e.score ?? 0,
+        name: e.name || '',
+        ts: Date.now(), // No timestamp in V1 fraud cache, treat as fresh
+      });
+      count++;
+    }
+    console.log(`[Enrichment] Loaded ${count} fraud cache entries from disk`);
+  } catch (err) {
+    console.log('[Enrichment] No fraud cache file found, starting fresh');
+  }
+}
+
+// Save CNAM cache to disk periodically
+let lastCnamSave = 0;
+async function saveCnamCache() {
+  const now = Date.now();
+  if (now - lastCnamSave < 60_000) return; // Max once per minute
+  lastCnamSave = now;
+  try {
+    const obj: Record<string, any> = {};
+    for (const [num, entry] of cnamCache) {
+      obj[num] = {
+        caller_name: entry.name,
+        carrier: entry.carrier,
+        carrier_type: entry.type,
+        state: entry.state,
+        city: entry.city,
+        ts: entry.ts / 1000, // Back to seconds for V1 compat
+      };
+    }
+    await writeFile(CNAM_CACHE_FILE, JSON.stringify(obj));
+  } catch {}
+}
 
 // In-flight dedup: prevent multiple lookups for same number
 const inFlightCnam = new Set<string>();
@@ -49,6 +122,9 @@ export async function enrichChannels(
 ) {
   if (!canCnam && !canFraud) return;
   if (!channels || channels.length === 0) return;
+
+  // Load V1 caches on first call
+  await loadCachesFromDisk();
 
   // Collect unique numbers to look up
   const numbers = new Set<string>();
@@ -97,8 +173,11 @@ export async function enrichChannels(
       }
     });
 
-    // Run all lookups in parallel (with a concurrency limit)
+    // Run all lookups in parallel
     await Promise.allSettled(lookups);
+
+    // Persist cache to disk
+    saveCnamCache().catch(() => {});
   }
 
   // Lookup fraud for caller numbers only (parallel)
