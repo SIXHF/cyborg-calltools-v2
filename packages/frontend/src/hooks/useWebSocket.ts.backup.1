@@ -5,7 +5,7 @@ import { useTranscriptStore } from '../stores/transcriptStore';
 import { useUiStore } from '../stores/uiStore';
 import type { ServerMessage } from '@calltools/shared';
 
-const WS_URL = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_WS_URL) || 'wss://sip.osetec.net:8766';
+const WS_URL = import.meta.env.VITE_WS_URL ?? 'wss://sip.osetec.net:8766';
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 30_000;
 const PING_INTERVAL_MS = 30_000;
@@ -15,8 +15,8 @@ let wsInstance: WebSocket | null = null;
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttempt = useRef(0);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const pingTimer = useRef<ReturnType<typeof setInterval>>(undefined);
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout>>();
+  const pingTimer = useRef<ReturnType<typeof setInterval>>();
 
   const auth = useAuthStore();
   const channels = useChannelStore();

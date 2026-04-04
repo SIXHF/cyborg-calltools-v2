@@ -144,7 +144,7 @@ export type ServerMessage =
   | { type: 'transcript_update'; channel: string; speaker: string; text: string; isFinal: boolean }
   | { type: 'transcript_done'; channel: string }
   | { type: 'audio_stream'; channel: string; data: string }
-  | { type: 'cnam_result'; number: string; name: string; carrier?: string; lineType?: string }
+  | { type: 'cnam_result'; number: string; name: string; carrier?: string; type?: string }
   | { type: 'fraud_result'; number: string; score: number; riskLevel: string; flags: string[] }
   | { type: 'cdr_result'; records: Record<string, unknown>[]; total: number }
   | { type: 'stats_result'; data: Record<string, unknown> }
