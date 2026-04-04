@@ -54,7 +54,8 @@ const server = Bun.serve({
 
   fetch(req, server) {
     const origin = req.headers.get('origin') ?? '';
-    if (ALLOWED_ORIGINS.length > 0 && !ALLOWED_ORIGINS.includes(origin)) {
+    // Allow empty origin (proxied requests) and check whitelist
+    if (origin && ALLOWED_ORIGINS.length > 0 && !ALLOWED_ORIGINS.includes(origin)) {
       return new Response('Forbidden', { status: 403 });
     }
 
