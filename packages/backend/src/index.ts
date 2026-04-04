@@ -17,6 +17,7 @@ import {
   formatChannelsForClient,
   type RawChannel,
 } from './ami/channels';
+import { enrichChannels } from './services/enrichment';
 
 const VERSION = '2.0.0-beta.1';
 
@@ -97,6 +98,14 @@ async function broadcastChannels(allChannels: RawChannel[]) {
 
         const formatted = formatChannelsForClient(userChannels, allChannels);
         send(ws, { type: 'channel_update', channels: formatted });
+
+        // Fire async CNAM + fraud + cost enrichment (non-blocking)
+        if (formatted.length > 0) {
+          const canCnam = session.role === 'admin' || session.permissions.cnam_lookup !== false;
+          const canFraud = session.role === 'admin';
+          const canCost = session.role === 'admin' || session.permissions.call_cost === true;
+          enrichChannels(ws, send, formatted, canCnam, canFraud, canCost, allChannels as any).catch(() => {});
+        }
       } catch (err) {
         console.error(`[WS] Failed to broadcast channels to ${username}:`, err);
       }

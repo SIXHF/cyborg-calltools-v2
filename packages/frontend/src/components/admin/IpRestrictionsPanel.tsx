@@ -15,23 +15,21 @@ export function IpRestrictionsPanel() {
   const [ipInput, setIpInput] = useState('');
   const [loaded, setLoaded] = useState(false);
 
-  // Listen for responses
+  // Listen for responses via ws-message CustomEvent
   useEffect(() => {
-    const handler = (event: MessageEvent) => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === 'ip_restrictions_list') {
-          setRestrictions(msg.ip_restrictions ?? { users: {}, sip_users: {} });
-          setLoaded(true);
-        } else if (msg.type === 'ip_restrictions_updated') {
-          // Refresh the full list
-          wsSend({ cmd: 'admin_get_ip_restrictions' });
-          addToast(`IP restrictions updated for ${msg.target_type}/${msg.target_name}.`, 'success', 3000);
-        }
-      } catch { /* ignore */ }
+    const handler = (event: Event) => {
+      const msg = (event as CustomEvent).detail;
+      if (!msg) return;
+      if (msg.type === 'ip_restrictions_list') {
+        setRestrictions(msg.restrictions ?? { users: {}, sip_users: {} });
+        setLoaded(true);
+      } else if (msg.type === 'ip_restrictions_updated') {
+        wsSend({ cmd: 'admin_get_ip_restrictions' });
+        addToast(`IP restrictions updated for ${msg.targetType}/${msg.targetName}.`, 'success', 3000);
+      }
     };
-    window.addEventListener('ws_message', handler as EventListener);
-    return () => window.removeEventListener('ws_message', handler as EventListener);
+    window.addEventListener('ws-message', handler);
+    return () => window.removeEventListener('ws-message', handler);
   }, [addToast]);
 
   // Load on mount

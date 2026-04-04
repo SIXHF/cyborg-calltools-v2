@@ -20,29 +20,27 @@ export function RateLimitsPanel() {
   const [newWhitelistIp, setNewWhitelistIp] = useState('');
   const [loaded, setLoaded] = useState(false);
 
-  // Listen for responses
+  // Listen for responses via ws-message CustomEvent
   useEffect(() => {
-    const handler = (event: MessageEvent) => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === 'rate_limits_list') {
-          setRateLimits(msg.rate_limits ?? []);
-          setWhitelist(msg.whitelist ?? []);
-          setMaxAttempts(msg.max_attempts ?? 5);
-          setWindowSeconds(msg.window_seconds ?? 60);
-          setLoaded(true);
-        } else if (msg.type === 'rate_limit_cleared') {
-          // Refresh
-          wsSend({ cmd: 'admin_get_rate_limits' });
-          addToast(msg.clear_all ? 'All rate limits cleared.' : `Rate limit cleared for ${msg.rate_key}.`, 'success', 3000);
-        } else if (msg.type === 'rate_whitelist_updated') {
-          setWhitelist(msg.whitelist ?? []);
-          addToast('Rate limit whitelist updated.', 'success', 3000);
-        }
-      } catch { /* ignore */ }
+    const handler = (event: Event) => {
+      const msg = (event as CustomEvent).detail;
+      if (!msg) return;
+      if (msg.type === 'rate_limits_list') {
+        setRateLimits(msg.rate_limits ?? []);
+        setWhitelist(msg.whitelist ?? []);
+        setMaxAttempts(msg.max_attempts ?? 5);
+        setWindowSeconds(msg.window_seconds ?? 60);
+        setLoaded(true);
+      } else if (msg.type === 'rate_limit_cleared') {
+        wsSend({ cmd: 'admin_get_rate_limits' });
+        addToast(msg.clear_all ? 'All rate limits cleared.' : `Rate limit cleared for ${msg.rate_key}.`, 'success', 3000);
+      } else if (msg.type === 'rate_whitelist_updated') {
+        setWhitelist(msg.whitelist ?? []);
+        addToast('Rate limit whitelist updated.', 'success', 3000);
+      }
     };
-    window.addEventListener('ws_message', handler as EventListener);
-    return () => window.removeEventListener('ws_message', handler as EventListener);
+    window.addEventListener('ws-message', handler);
+    return () => window.removeEventListener('ws-message', handler);
   }, [addToast]);
 
   // Load on mount

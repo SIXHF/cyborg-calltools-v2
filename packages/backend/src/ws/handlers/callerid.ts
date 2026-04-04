@@ -77,6 +77,17 @@ export async function handleSetCallerId(
 
   try {
     await dbQuery('UPDATE pkg_sip SET callerid = ? WHERE name = ?', [validated, targetUser]);
+
+    // Reload SIP peer in Asterisk so the new callerid takes effect immediately
+    try {
+      const proc = Bun.spawn(['/usr/sbin/asterisk', '-rx', `sip reload`], {
+        stdout: 'pipe', stderr: 'pipe',
+      });
+      await new Response(proc.stdout).text();
+    } catch (err) {
+      console.error('[CallerID] sip reload failed:', err);
+    }
+
     auditLog(session.username, session.role, session.ip, 'set_callerid', targetUser, validated);
     send(ws, { type: 'callerid_updated', sipUser: targetUser, callerid: validated });
   } catch (err) {

@@ -239,7 +239,7 @@ export const AdminSetPermissionsMessage = z.object({
 
 export const AdminForceLogoutMessage = z.object({
   cmd: z.literal('admin_force_logout'),
-  targetToken: z.string().length(64),
+  targetToken: z.string().min(8),
 });
 
 export const AdminBroadcastMessage = z.object({
@@ -251,7 +251,9 @@ export const AdminBroadcastMessage = z.object({
 
 export const AdminClearRateLimitMessage = z.object({
   cmd: z.literal('admin_clear_rate_limit'),
-  ip: z.string().min(1),
+  ip: z.string().optional(),
+  rateKey: z.string().optional(),
+  clearAll: z.boolean().optional(),
 });
 
 export const AdminApproveAudioMessage = z.object({
@@ -266,10 +268,9 @@ export const AdminGetIpRestrictionsMessage = z.object({
 
 export const AdminSetIpRestrictionsMessage = z.object({
   cmd: z.literal('admin_set_ip_restrictions'),
-  target: z.string().min(1),
-  ips: z.array(z.string()).optional(),
-  action: z.string().optional(),
-  ip: z.string().optional(),
+  targetType: z.string().min(1),
+  targetName: z.string().min(1),
+  ips: z.array(z.string()),
 });
 
 export const AdminGetRateLimitsMessage = z.object({
