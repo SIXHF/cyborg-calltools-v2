@@ -21,10 +21,10 @@ export function App() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
+      <>
         <LoginForm />
         <Toast />
-      </div>
+      </>
     );
   }
 
@@ -32,7 +32,7 @@ export function App() {
     <div className="min-h-screen flex flex-col">
       <Header />
       <TabNav />
-      <main className="flex-1 p-4 max-w-7xl mx-auto w-full">
+      <main className="flex-1 p-6 max-w-[1000px] mx-auto w-full pb-16">
         {activeTab === 'monitor' && <MonitorTab />}
         {activeTab === 'tools' && <ToolsTab />}
         {activeTab === 'history' && <HistoryTab />}

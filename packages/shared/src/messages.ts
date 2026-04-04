@@ -72,6 +72,11 @@ export const GetCdrMessage = z.object({
   offset: z.number().int().min(0).default(0),
 });
 
+export const GetChannelsMessage = z.object({
+  cmd: z.literal('get_channels'),
+  targetSip: z.string().optional(),
+});
+
 export const GetStatsMessage = z.object({
   cmd: z.literal('get_stats'),
 });
@@ -118,6 +123,7 @@ export const ClientMessage = z.discriminatedUnion('cmd', [
   UploadAudioMessage,
   PlayAudioMessage,
   CnamLookupMessage,
+  GetChannelsMessage,
   GetCdrMessage,
   GetStatsMessage,
   AdminSetPermissionsMessage,

@@ -23,25 +23,23 @@ export function TabNav() {
   const visibleTabs = TABS.filter((tab) => !tab.adminOnly || isAdmin);
 
   return (
-    <nav className="px-4 pt-3" role="tablist" aria-label="Main navigation">
-      <div className="flex gap-1 overflow-x-auto">
-        {visibleTabs.map((tab) => (
-          <button
-            key={tab.id}
-            role="tab"
-            aria-selected={activeTab === tab.id}
-            aria-controls={`panel-${tab.id}`}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors whitespace-nowrap ${
-              activeTab === tab.id
-                ? 'bg-ct-surface text-ct-accent border border-ct-border border-b-transparent'
-                : 'text-ct-muted hover:text-ct-text hover:bg-ct-surface/50'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+    <nav
+      className="tab-bar-gradient sticky top-[54px] z-[55] flex items-center gap-1 px-6 py-2"
+      role="tablist"
+      aria-label="Main navigation"
+    >
+      {visibleTabs.map((tab) => (
+        <button
+          key={tab.id}
+          role="tab"
+          aria-selected={activeTab === tab.id}
+          aria-controls={`panel-${tab.id}`}
+          onClick={() => setActiveTab(tab.id)}
+          className={`tab-btn-v1 ${activeTab === tab.id ? 'active' : ''}`}
+        >
+          {tab.label}
+        </button>
+      ))}
     </nav>
   );
 }

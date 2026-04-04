@@ -41,6 +41,8 @@ function handleMessage(event: MessageEvent) {
       });
       ui.addLogEntry('Authenticated successfully.');
       ui.addToast('Logged in!', 'success', 2000);
+      // Request initial channel list
+      wsSend({ cmd: 'get_channels' });
       break;
 
     case 'auth_error':
@@ -51,6 +53,8 @@ function handleMessage(event: MessageEvent) {
     case 'resume_ok':
       auth.resume({ username: msg.username, role: msg.role as any });
       ui.addLogEntry('Session resumed.');
+      // Request channels on resume
+      wsSend({ cmd: 'get_channels' });
       break;
 
     case 'resume_failed':

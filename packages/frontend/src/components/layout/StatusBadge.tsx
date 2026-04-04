@@ -4,15 +4,12 @@ interface StatusBadgeProps {
 
 export function StatusBadge({ connected }: StatusBadgeProps) {
   return (
-    <div className="flex items-center gap-1.5">
-      <div
-        className={`w-2 h-2 rounded-full ${
-          connected ? 'bg-ct-green animate-pulse' : 'bg-ct-red'
-        }`}
+    <span className={`status-badge-v1 ${connected ? 'connected' : 'disconnected'}`}>
+      <span
+        className="w-2 h-2 rounded-full bg-current"
+        style={connected ? { animation: 'pulseGlow 2s infinite' } : undefined}
       />
-      <span className={`text-xs font-medium ${connected ? 'text-ct-green' : 'text-ct-red'}`}>
-        {connected ? 'Connected' : 'Disconnected'}
-      </span>
-    </div>
+      <span className="hidden sm:inline">{connected ? 'Connected' : 'Disconnected'}</span>
+    </span>
   );
 }

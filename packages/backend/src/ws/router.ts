@@ -3,6 +3,12 @@ import type { ServerMessage, ClientMessageType } from '@calltools/shared';
 import { auditLog } from '../audit/logger';
 import { destroySession } from '../auth/session';
 import { checkRateLimit } from './middleware';
+import {
+  getActiveChannels,
+  getUserChannels,
+  enrichWithTrunkInfo,
+  formatChannelsForClient,
+} from '../ami/channels';
 
 type SendFn = (ws: ServerWebSocket<any>, msg: ServerMessage) => void;
 
@@ -68,6 +74,10 @@ export async function routeMessage(
       await handleOriginateCall(ws, session, msg, send);
       break;
 
+    case 'get_channels':
+      await handleGetChannels(ws, session, msg, send);
+      break;
+
     case 'cnam_lookup':
       await handleCnamLookup(ws, session, msg, send);
       break;
@@ -105,6 +115,32 @@ export async function routeMessage(
     default:
       send(ws, { type: 'error', message: `Unknown command: ${cmd}`, code: 'UNKNOWN_CMD' });
   }
+}
+
+// ── Handler implementations ────────────────────────────────────────
+
+async function handleGetChannels(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {
+  const allChannels = await getActiveChannels();
+  const sipUsers = session.sipUsers ?? (session.sipUser ? [session.sipUser] : []);
+  const targetSip = msg.targetSip || undefined;
+
+  // Validate targetSip is in user's scope
+  if (targetSip && session.role !== 'admin') {
+    if (!sipUsers.includes(targetSip)) {
+      send(ws, { type: 'error', message: 'Target SIP user not in your scope.', code: 'FORBIDDEN' });
+      return;
+    }
+  }
+
+  const userChannels = await getUserChannels(allChannels, session.role, sipUsers, targetSip);
+
+  // Admin gets trunk info enrichment
+  if (session.role === 'admin') {
+    enrichWithTrunkInfo(userChannels, allChannels);
+  }
+
+  const formatted = formatChannelsForClient(userChannels, allChannels);
+  send(ws, { type: 'channel_update', channels: formatted });
 }
 
 // ── Handler stubs (to be implemented with full logic) ──────────────

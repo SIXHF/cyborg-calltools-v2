@@ -6,6 +6,15 @@ import { routeMessage } from './ws/router';
 import { auditLog } from './audit/logger';
 import { initAmiClient } from './ami/client';
 import { initDatabase } from './db/mysql';
+import {
+  startChannelPolling,
+  onChannelsRefreshed,
+  getActiveChannels,
+  getUserChannels,
+  enrichWithTrunkInfo,
+  formatChannelsForClient,
+  type RawChannel,
+} from './ami/channels';
 
 const VERSION = '2.0.0-beta.1';
 
@@ -45,6 +54,35 @@ function untrackConnection(ws: ServerWebSocket<WsData>) {
   for (const [username, conns] of connectionsByUser) {
     conns.delete(ws);
     if (conns.size === 0) connectionsByUser.delete(username);
+  }
+}
+
+/**
+ * Broadcast channel updates to all authenticated clients.
+ * Each client gets channels filtered by their role/permissions.
+ */
+async function broadcastChannels(allChannels: RawChannel[]) {
+  for (const [username, conns] of connectionsByUser) {
+    for (const ws of conns) {
+      if (!ws.data.token) continue;
+      const session = getSession(ws.data.token);
+      if (!session) continue;
+
+      try {
+        const sipUsers = session.sipUsers ?? (session.sipUser ? [session.sipUser] : []);
+        const userChannels = await getUserChannels(allChannels, session.role, sipUsers);
+
+        // Admin gets trunk info enrichment
+        if (session.role === 'admin') {
+          enrichWithTrunkInfo(userChannels, allChannels);
+        }
+
+        const formatted = formatChannelsForClient(userChannels, allChannels);
+        send(ws, { type: 'channel_update', channels: formatted });
+      } catch (err) {
+        console.error(`[WS] Failed to broadcast channels to ${username}:`, err);
+      }
+    }
   }
 }
 
@@ -221,6 +259,11 @@ async function init() {
   try {
     await initAmiClient();
     console.log('[CallTools V2] AMI connected.');
+
+    // Start channel polling and broadcasting
+    onChannelsRefreshed(broadcastChannels);
+    startChannelPolling(3000);
+    console.log('[CallTools V2] Channel polling started.');
   } catch (err) {
     console.error('[CallTools V2] AMI connection failed:', err);
   }

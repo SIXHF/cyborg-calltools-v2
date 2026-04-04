@@ -6,31 +6,32 @@ export function Header() {
   const { username, role, version, logout } = useAuth();
   const { wsConnected } = useUiStore();
 
+  const roleLabel = role === 'admin' ? 'Admin' : role === 'user' ? 'User' : 'SIP';
+
   return (
-    <header className="glass-panel m-4 mb-0 px-6 py-3 flex items-center justify-between">
+    <header className="header-gradient px-6 py-3.5 flex items-center justify-between sticky top-0 z-[60]">
       <div className="flex items-center gap-4">
-        <h1 className="text-lg font-semibold text-ct-accent">
-          CallTools <span className="text-ct-muted text-sm font-normal">v2 beta</span>
+        <h1 className="text-xl font-semibold text-ct-accent tracking-wide">
+          Call Tools <span className="beta-badge">BETA</span>{' '}
+          <span className="text-ct-muted font-normal text-base">/ Cyborg Telecom</span>
         </h1>
-        <StatusBadge connected={wsConnected} />
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
         {version && (
-          <span className="text-xs text-ct-muted font-mono">v{version}</span>
+          <span className="text-[10px] text-ct-muted-dark font-mono">v{version}</span>
         )}
-        <div className="flex items-center gap-2">
-          <span className="text-sm">
-            <span className="text-ct-muted">{role === 'admin' ? 'Admin' : role === 'user' ? 'User' : 'SIP'}:</span>{' '}
-            <span className="text-ct-text font-medium">{username}</span>
-          </span>
-          <button
-            onClick={logout}
-            className="text-xs px-3 py-1 rounded bg-ct-red/10 text-ct-red hover:bg-ct-red/20 transition-colors"
-          >
-            Logout
-          </button>
-        </div>
+        <span className="user-badge-v1">
+          <span className="w-2 h-2 rounded-full bg-current" />
+          {roleLabel}: {username}
+        </span>
+        <button
+          onClick={logout}
+          className="btn btn-sm btn-ghost"
+        >
+          Logout
+        </button>
+        <StatusBadge connected={wsConnected} />
       </div>
     </header>
   );
