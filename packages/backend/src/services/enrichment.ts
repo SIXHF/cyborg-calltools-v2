@@ -7,6 +7,7 @@
 import type { ServerWebSocket } from 'bun';
 import { lookupCnam } from './cnam';
 import { checkFraud } from './fraud';
+import { buildCostMap } from './costmap';
 import { readFile, writeFile } from 'fs/promises';
 
 type SendFn = (ws: ServerWebSocket<any>, msg: any) => void;
