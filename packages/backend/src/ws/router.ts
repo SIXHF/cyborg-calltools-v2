@@ -19,6 +19,7 @@ import { handleGetBalance, handleGetRefillHistory } from './handlers/billing';
 import { handleCnamLookup } from './handlers/cnam';
 import { handleStartListening as handleDtmfStart, handleStopListening as handleDtmfStop } from './handlers/dtmf';
 import { handleCreatePayment } from './handlers/payment';
+import { handleListAudio, handleUploadAudio, handlePlayAudio, handleStopAudio, handleDeleteAudio, cleanupAudioState } from './handlers/audio';
 import { enrichChannels } from '../services/enrichment';
 import {
   handleGetStats,
@@ -211,12 +212,28 @@ export async function routeMessage(
       await handleGetSessions(ws, session, msg as any, send);
       break;
 
+    case 'list_audio':
+      if (!session.permissions.audio_player) {
+        send(ws, { type: 'error', message: 'Audio player is disabled for your account.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleListAudio(ws, session, msg, send);
+      break;
+
     case 'upload_audio':
       await handleUploadAudio(ws, session, msg, send);
       break;
 
     case 'play_audio':
       await handlePlayAudio(ws, session, msg, send);
+      break;
+
+    case 'stop_audio':
+      await handleStopAudio(ws, session, msg, send);
+      break;
+
+    case 'delete_audio':
+      await handleDeleteAudio(ws, session, msg, send);
       break;
 
     // Admin commands
@@ -376,25 +393,6 @@ async function handleStartTranscript(ws: ServerWebSocket<any>, session: SessionI
 async function handleStopTranscript(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {
   auditLog(session.username, session.role, session.ip, 'stop_transcript', msg.channel);
   send(ws, { type: 'transcript_done', channel: msg.channel });
-}
-
-async function handleUploadAudio(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {
-  if (!session.permissions.audio_player) {
-    send(ws, { type: 'error', message: 'Audio upload not permitted.', code: 'FORBIDDEN' });
-    return;
-  }
-  auditLog(session.username, session.role, session.ip, 'upload_audio', msg.filename);
-  // TODO: Save audio file, add to pending approvals
-  send(ws, { type: 'error', message: 'Audio upload not yet implemented.', code: 'NOT_IMPLEMENTED' });
-}
-
-async function handlePlayAudio(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {
-  if (!session.permissions.audio_player) {
-    send(ws, { type: 'error', message: 'Audio playback not permitted.', code: 'FORBIDDEN' });
-    return;
-  }
-  // TODO: Stream audio via AMI
-  send(ws, { type: 'error', message: 'Audio playback not yet implemented.', code: 'NOT_IMPLEMENTED' });
 }
 
 async function handleGetSipInfo(ws: ServerWebSocket<any>, session: SessionInfo, send: SendFn) {

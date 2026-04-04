@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { useChannelStore } from '../../stores/channelStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { useWsMessage } from '../../hooks/useWsMessage';
+import { AudioPlayerPanel } from './AudioPlayerPanel';
 
 /** CNAM Lookup Panel */
 function CnamLookupPanel() {
@@ -314,6 +315,7 @@ export function ToolsTab() {
       {(isAdmin || permissions.transcript !== false) && <TranscriptPanel />}
       {(isAdmin || permissions.dtmf !== false) && <DtmfPanel />}
       {(isAdmin || permissions.quick_dial !== false) && <QuickDialPanel />}
+      {(isAdmin || permissions.audio_player !== false) && <AudioPlayerPanel />}
       {(isAdmin || permissions.cnam_lookup !== false) && <CnamLookupPanel />}
       <BinLookupPanel />
     </div>

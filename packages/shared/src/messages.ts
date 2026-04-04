@@ -66,10 +66,23 @@ export const UploadAudioMessage = z.object({
   data: z.string(), // base64 encoded
 });
 
+export const ListAudioMessage = z.object({
+  cmd: z.literal('list_audio'),
+});
+
 export const PlayAudioMessage = z.object({
   cmd: z.literal('play_audio'),
   channel: z.string().min(1),
   filename: z.string().min(1),
+});
+
+export const StopAudioMessage = z.object({
+  cmd: z.literal('stop_audio'),
+});
+
+export const DeleteAudioMessage = z.object({
+  cmd: z.literal('delete_audio'),
+  filename: z.string().min(1).max(128),
 });
 
 export const CnamLookupMessage = z.object({
@@ -202,8 +215,11 @@ export const ClientMessage = z.discriminatedUnion('cmd', [
   GetCallerIdMessage,
   SetCallerIdMessage,
   OriginateCallMessage,
+  ListAudioMessage,
   UploadAudioMessage,
   PlayAudioMessage,
+  StopAudioMessage,
+  DeleteAudioMessage,
   CnamLookupMessage,
   TransferCallMessage,
   CreatePaymentMessage,
@@ -243,6 +259,11 @@ export type ServerMessage =
   | { type: 'transcript_start'; channel: string }
   | { type: 'transcript_update'; channel: string; speaker: string; text: string; isFinal: boolean }
   | { type: 'transcript_done'; channel: string }
+  | { type: 'audio_list'; files: Array<{ name: string; size: number; status: string; uploaded_by?: string; uploaded_at?: string }> }
+  | { type: 'audio_uploaded'; name: string; status: string; files: Array<{ name: string; size: number; status: string; uploaded_by?: string; uploaded_at?: string }> }
+  | { type: 'audio_deleted'; name: string; files: Array<{ name: string; size: number; status: string; uploaded_by?: string; uploaded_at?: string }> }
+  | { type: 'audio_playing'; file: string; callee: string }
+  | { type: 'audio_stopped'; file: string | null; reason: string }
   | { type: 'audio_stream'; channel: string; data: string }
   | { type: 'cnam_result'; number: string; name: string; carrier?: string; lineType?: string; state?: string; city?: string }
   | { type: 'fraud_result'; number: string; score: number; riskLevel: string; flags: string[] }

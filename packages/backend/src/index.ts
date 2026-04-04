@@ -4,6 +4,7 @@ import { authenticate, resumeSession, createSession, destroySession, getSession,
 import { checkRateLimit } from './ws/middleware';
 import { routeMessage, setBroadcastFunction } from './ws/router';
 import { cleanupMonitor } from './ws/handlers/dtmf';
+import { cleanupAudioState } from './ws/handlers/audio';
 import { auditLog } from './audit/logger';
 import { initAmiClient } from './ami/client';
 import { initDatabase } from './db/mysql';
@@ -130,7 +131,7 @@ const server = Bun.serve({
   },
 
   websocket: {
-    maxPayloadLength: 2 * 1024 * 1024, // 2MB default
+    maxPayloadLength: 16 * 1024 * 1024, // 16MB to accommodate base64 audio uploads (10MB raw ~13.3MB encoded)
     idleTimeout: 120, // seconds
 
     open(ws: ServerWebSocket<WsData>) {
@@ -277,6 +278,7 @@ const server = Bun.serve({
         }
         cleanupMonitor(ws.data.token); // Clean up DTMF monitor (V1 line 2682)
       }
+      cleanupAudioState(ws); // Clean up audio playback state
       untrackConnection(ws);
     },
   },
