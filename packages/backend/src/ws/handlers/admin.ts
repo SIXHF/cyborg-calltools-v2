@@ -368,10 +368,11 @@ export async function handleBroadcast(
         try { (s.ws as any).send(JSON.stringify(broadcastMsg)); delivered++; } catch {}
       }
     }
-    send(ws, { type: 'admin_broadcast', message: `Broadcast sent to ${delivered} user(s): "${message}"`, from: 'system' } as any);
+    send(ws, { type: 'broadcast_sent', recipients: delivered, message, target: targets.join(', ') } as any);
   } else if (broadcastToAll) {
     broadcastToAll(broadcastMsg);
-    send(ws, { type: 'admin_broadcast', message: `Broadcast sent to all: "${message}"`, from: 'system' } as any);
+    const allCount = getActiveSessions().length;
+    send(ws, { type: 'broadcast_sent', recipients: allCount, message, target: 'all' } as any);
   }
 }
 

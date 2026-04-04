@@ -127,6 +127,10 @@ export async function routeMessage(
         send(ws, { type: 'error', message: 'Caller ID management not permitted.', code: 'FORBIDDEN' });
         return;
       }
+      // V1: 1 callerid change per 3 seconds per user
+      { const rl = checkRateLimit(`callerid:${session.username}`, 1, 3_000);
+        if (!rl.allowed) return; // V1 silently ignores rapid duplicate requests
+      }
       await handleSetCallerId(ws, session, msg as any, send);
       break;
 
@@ -134,6 +138,10 @@ export async function routeMessage(
       if (!session.permissions.quick_dial) {
         send(ws, { type: 'error', message: 'Quick dial not permitted.', code: 'FORBIDDEN' });
         return;
+      }
+      // V1: 1 originate per 5 seconds per user
+      { const rl = checkRateLimit(`originate:${session.username}`, 1, 5_000);
+        if (!rl.allowed) { send(ws, { type: 'error', message: 'Please wait before making another call.', code: 'RATE_LIMITED' }); return; }
       }
       await handleOriginateCall(ws, session, msg as any, send);
       break;

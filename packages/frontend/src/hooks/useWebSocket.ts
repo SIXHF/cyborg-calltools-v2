@@ -4,6 +4,7 @@ import { useChannelStore } from '../stores/channelStore';
 import { useTranscriptStore } from '../stores/transcriptStore';
 import { useUiStore } from '../stores/uiStore';
 import type { ServerMessage } from '@calltools/shared';
+import { notifDtmfBeep, notifCallConnect, notifCallHangup, notifBroadcast, getNotifSettings } from '../utils/audio';
 
 const WS_URL = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_WS_URL) || 'wss://sip.osetec.net/beta-ws/';
 const RECONNECT_BASE_MS = 1000;
@@ -74,14 +75,20 @@ function handleMessage(event: MessageEvent) {
     case 'dtmf_start':
       ui.addLogEntry(`DTMF capture started for ${msg.channel}`);
       window.dispatchEvent(new CustomEvent('dtmf_start', { detail: msg }));
+      // V1: play call connect sound (600Hz + 900Hz)
+      { const ns = getNotifSettings(); if (ns.callEvents) notifCallConnect(); }
       break;
 
     case 'dtmf_digit':
       ui.addLogEntry(`DTMF [${msg.channel}]: ${msg.digit} (${msg.direction})`);
+      // V1: play DTMF beep (1200Hz)
+      { const ns = getNotifSettings(); if (ns.dtmfSound) notifDtmfBeep(); }
       break;
 
     case 'dtmf_done':
       ui.addLogEntry(`DTMF capture ended for ${msg.channel}`);
+      // V1: play call hangup sound (500Hz + 350Hz)
+      { const ns = getNotifSettings(); if (ns.callEvents) notifCallHangup(); }
       break;
 
     case 'transcript_start':
@@ -161,6 +168,11 @@ function handleMessage(event: MessageEvent) {
       ui.addToast((msg as any).using_default ? 'Hold music set to default' : 'Hold music updated', 'success', 3000);
       break;
 
+    case 'broadcast_sent':
+      ui.addToast(`Broadcast sent to ${(msg as any).recipients} user(s)`, 'success', 3000);
+      ui.addLogEntry(`Broadcast sent to ${(msg as any).target} (${(msg as any).recipients} recipients)`);
+      break;
+
     case 'admin_broadcast': {
       // V1 parity: colored toast, sound, desktop notification
       const bcMsg = msg as any;
@@ -182,21 +194,7 @@ function handleMessage(event: MessageEvent) {
       }, 50);
 
       // Sound: two-tone beep (V1: 800Hz then 1000Hz)
-      try {
-        const actx = new AudioContext();
-        const playTone = (freq: number, delay: number) => {
-          const osc = actx.createOscillator();
-          const gain = actx.createGain();
-          osc.frequency.value = freq;
-          gain.gain.value = 0.15;
-          osc.connect(gain);
-          gain.connect(actx.destination);
-          osc.start(actx.currentTime + delay);
-          osc.stop(actx.currentTime + delay + 0.15);
-        };
-        playTone(800, 0);
-        playTone(1000, 0.17);
-      } catch {}
+      notifBroadcast();
 
       // Desktop notification (V1 parity)
       try {
