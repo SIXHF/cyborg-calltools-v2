@@ -19,7 +19,18 @@ export async function handleGetBalance(
   send: SendFn
 ) {
   try {
-    let userId: number | null = session.userId ?? null;
+    let userId: number | null = null;
+
+    // If admin/user has a selected SIP user, show that user's balance
+    const targetSip = msg.targetSip || session.selectedSipUser;
+    if (targetSip && (session.role === 'admin' || session.role === 'user')) {
+      userId = await resolveUserId(targetSip);
+    }
+
+    // Fall back to session's own userId
+    if (!userId) {
+      userId = session.userId ?? null;
+    }
 
     if (!userId && session.sipUser) {
       userId = await resolveUserId(session.sipUser);
@@ -59,7 +70,18 @@ export async function handleGetRefillHistory(
   const offset = (page - 1) * perPage;
 
   try {
-    let userId: number | null = session.userId ?? null;
+    let userId: number | null = null;
+
+    // If admin/user has a selected SIP user, show that user's refill history
+    const targetSip = msg.targetSip || session.selectedSipUser;
+    if (targetSip && (session.role === 'admin' || session.role === 'user')) {
+      userId = await resolveUserId(targetSip);
+    }
+
+    // Fall back to session's own userId
+    if (!userId) {
+      userId = session.userId ?? null;
+    }
     if (!userId && session.sipUser) {
       userId = await resolveUserId(session.sipUser);
     }

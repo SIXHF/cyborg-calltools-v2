@@ -19,10 +19,10 @@ export function Header() {
   const showSipSelector = (role === 'admin' || role === 'user') && sipUsers.length > 0;
   const showBalance = permissions.billing !== false;
 
-  // Fetch balance on mount
+  // Fetch balance on mount and when SIP user changes
   useEffect(() => {
     if (showBalance) wsSend({ cmd: 'get_balance' });
-  }, [showBalance]);
+  }, [showBalance, selectedSip]);
 
   const balance = balanceMsg?.balance;
 

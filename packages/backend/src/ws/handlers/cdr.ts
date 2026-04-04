@@ -136,7 +136,7 @@ export async function handleGetCdr(
   const search = (msg.search ?? '').trim();
   const dateFrom = (msg.dateFrom ?? '').trim();
   const dateTo = (msg.dateTo ?? '').trim();
-  const targetSip = msg.targetSip ?? undefined;
+  const targetSip = msg.targetSip || session.selectedSipUser || undefined;
   const offset = (page - 1) * perPage;
 
   // Build WHERE clause using parameterized queries
