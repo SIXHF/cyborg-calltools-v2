@@ -601,6 +601,53 @@ function GlobalSettingsPanel() {
   );
 }
 
+// ── Audio Approval Panel (Admin only) ──
+
+function AudioApprovalPanel() {
+  const [files, setFiles] = useState<any[]>([]);
+  const audioListMsg = useWsMessage<any>('audio_list');
+
+  useEffect(() => { wsSend({ cmd: 'list_audio' }); }, []);
+  useEffect(() => {
+    if (audioListMsg?.files) {
+      setFiles(audioListMsg.files.filter((f: any) => f.status === 'pending'));
+    }
+  }, [audioListMsg]);
+
+  const handleAction = (filename: string, action: 'approve' | 'reject') => {
+    wsSend({ cmd: 'admin_approve_audio', filename, action });
+    setFiles(prev => prev.filter(f => f.name !== filename));
+  };
+
+  return (
+    <div className="glass-panel">
+      <div className="panel-header">
+        <h2>Pending Audio Approvals</h2>
+        <button onClick={() => wsSend({ cmd: 'list_audio' })} className="btn btn-sm">Refresh</button>
+      </div>
+      {files.length === 0 ? (
+        <div className="empty-state">No pending audio files.</div>
+      ) : (
+        <div>
+          {files.map(f => (
+            <div key={f.name} className="flex items-center justify-between px-4 py-2.5 border-b border-ct-border-solid/50 last:border-b-0">
+              <div>
+                <span className="text-ct-accent font-mono text-sm">{f.name}</span>
+                {f.uploadedBy && <span className="text-ct-muted text-xs ml-2">by {f.uploadedBy}</span>}
+                {f.size && <span className="text-ct-muted-dark text-xs ml-2">{(f.size / 1024).toFixed(0)} KB</span>}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => handleAction(f.name, 'approve')} className="btn btn-sm btn-success">Approve</button>
+                <button onClick={() => handleAction(f.name, 'reject')} className="btn btn-sm btn-danger">Reject</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Audit Log Viewer ──
 
 function AuditLogPanel() {
@@ -896,6 +943,7 @@ export function AdminTab() {
           {isAdmin && <ManualCreditPanel />}
           {isAdmin && <IpRestrictionsPanel />}
           {isAdmin && <RateLimitsPanel />}
+          {isAdmin && <AudioApprovalPanel />}
           <AuditLogPanel />
         </div>
       )}
