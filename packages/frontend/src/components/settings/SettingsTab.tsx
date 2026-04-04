@@ -44,8 +44,16 @@ export function SettingsTab() {
   useEffect(() => {
     if (calleridUpdate) {
       setSaving(false);
-      setSavedMsg(`Saved: ${calleridUpdate.callerid || '(cleared)'}`);
-      setTimeout(() => setSavedMsg(''), 3000);
+      // Show fraud score feedback like V1
+      const score = calleridUpdate.fraud_score;
+      if (score !== undefined && score !== null && calleridUpdate.callerid) {
+        const label = score <= 30 ? 'Low risk' : score <= 59 ? 'Medium risk' : 'High risk';
+        const color = score <= 30 ? '#3fb950' : score <= 59 ? '#d29922' : '#f85149';
+        setSavedMsg(`Saved · ● ${score}/100 ${label}`);
+      } else {
+        setSavedMsg(`Saved: ${calleridUpdate.callerid || '(cleared)'}`);
+      }
+      setTimeout(() => setSavedMsg(''), 5000);
     }
   }, [calleridUpdate]);
 
@@ -147,7 +155,7 @@ export function SettingsTab() {
                   <span>Toll-free caller IDs (800, 833, 844, 855, 866, 877, 888) are not allowed for this account.</span>
                 </div>
               )}
-              {savedMsg && <div className="text-ct-green text-xs">{savedMsg}</div>}
+              {savedMsg && <div className="text-xs" style={{ color: savedMsg.includes('High risk') ? '#f85149' : savedMsg.includes('Medium risk') ? '#d29922' : '#3fb950' }}>{savedMsg}</div>}
               {!selectedSip && (role === 'admin' || role === 'user') && (
                 <div className="text-ct-yellow text-xs">Select a specific SIP user to edit Caller ID.</div>
               )}
