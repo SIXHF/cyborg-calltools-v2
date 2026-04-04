@@ -50,15 +50,15 @@ export function HistoryTab() {
     }
   }, [cdrMsg]);
 
-  const fetchCdr = (p: number) => {
+  const fetchCdr = (p: number, overrides?: { search?: string; dateFrom?: string; dateTo?: string }) => {
     setPage(p);
     wsSend({
       cmd: 'get_cdr',
       page: p,
       perPage: 25,
-      search: search || undefined,
-      dateFrom: dateFrom || undefined,
-      dateTo: dateTo || undefined,
+      search: (overrides?.search ?? search) || undefined,
+      dateFrom: (overrides?.dateFrom ?? dateFrom) || undefined,
+      dateTo: (overrides?.dateTo ?? dateTo) || undefined,
     });
   };
 
@@ -93,7 +93,7 @@ export function HistoryTab() {
             className="form-input !py-1.5 !px-2.5 !text-xs"
           />
           <button onClick={() => fetchCdr(1)} className="btn btn-sm btn-primary">Search</button>
-          <button onClick={() => { setSearch(''); setDateFrom(''); setDateTo(''); fetchCdr(1); }} className="btn btn-sm">Clear</button>
+          <button onClick={() => { setSearch(''); setDateFrom(''); setDateTo(''); fetchCdr(1, { search: '', dateFrom: '', dateTo: '' }); }} className="btn btn-sm">Clear</button>
         </div>
 
         {records.length === 0 ? (

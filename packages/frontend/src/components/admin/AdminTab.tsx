@@ -345,10 +345,10 @@ function PermissionsPanel() {
       setSipList(sips);
       // Refresh current target if set
       if (selectedTarget && permMsg.config.admin_restrictions?.[selectedTarget]) {
-        setTargetPerms(permMsg.config.admin_restrictions[selectedTarget]);
+        setTargetPerms({ ...permMsg.config.defaults, ...permMsg.config.admin_restrictions[selectedTarget] });
       }
     }
-  }, [permMsg]);
+  }, [permMsg, selectedTarget]);
 
   const loadPerms = (target: string) => {
     setSelectedTarget(target);

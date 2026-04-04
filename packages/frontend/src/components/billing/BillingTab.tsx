@@ -56,13 +56,18 @@ export function BillingTab() {
     }
   }, [paymentMsg]);
 
-  // Clear loading on any error (Bug 2.1 fix)
+  // Clear loading on any error
   useEffect(() => {
     if (errorMsg && rechargeLoading) {
       setRechargeLoading(false);
       setRechargeStatus(`Error: ${errorMsg.message || 'Unknown error'}`);
     }
-  }, [errorMsg]);
+  }, [errorMsg, rechargeLoading]);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
 
   const loadPage = (p: number) => {
     setPage(p);

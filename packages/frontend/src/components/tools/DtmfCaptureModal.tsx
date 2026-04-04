@@ -71,14 +71,11 @@ export function DtmfCaptureModal({ channel, sipUser, onClose }: DtmfCaptureModal
       const updated = { ...prev, [activeField]: prev[activeField] + digit };
 
       // Auto-advance logic
-      if (activeField === 'CC' && updated.CC.length >= 16) {
-        // Trigger BIN lookup at 6 digits
-        if (updated.CC.length === 6) doBinLookup(updated.CC);
-        if (updated.CC.length >= 19) {
-          setTimeout(() => advanceField(), 0);
-        }
-      } else if (activeField === 'CC' && updated.CC.length === 6) {
+      if (activeField === 'CC' && updated.CC.length === 6) {
         doBinLookup(updated.CC);
+      }
+      if (activeField === 'CC' && updated.CC.length >= 19) {
+        setTimeout(() => advanceField(), 0);
       } else if (activeField === 'EXP' && updated.EXP.length >= 4) {
         setTimeout(() => advanceField(), 0);
       } else if (activeField === 'CVV') {
