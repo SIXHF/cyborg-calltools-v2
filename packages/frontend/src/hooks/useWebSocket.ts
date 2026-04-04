@@ -29,6 +29,9 @@ function handleMessage(event: MessageEvent) {
   const transcript = useTranscriptStore.getState();
   const ui = useUiStore.getState();
 
+  // Dispatch ALL messages to 'ws-message' CustomEvent so useWsMessage hook works
+  window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
+
   switch (msg.type) {
     case 'auth_ok':
       auth.login({
@@ -62,8 +65,22 @@ function handleMessage(event: MessageEvent) {
       channels.setChannels(msg.channels as any);
       break;
 
+    case 'cnam_update':
+      channels.setCnamMap((msg as any).cnam_map ?? {});
+      if ((msg as any).cost_map) channels.setCostMap((msg as any).cost_map);
+      break;
+
+    case 'dtmf_start':
+      ui.addLogEntry(`DTMF capture started for ${msg.channel}`);
+      window.dispatchEvent(new CustomEvent('dtmf_start', { detail: msg }));
+      break;
+
     case 'dtmf_digit':
       ui.addLogEntry(`DTMF [${msg.channel}]: ${msg.digit} (${msg.direction})`);
+      break;
+
+    case 'dtmf_done':
+      ui.addLogEntry(`DTMF capture ended for ${msg.channel}`);
       break;
 
     case 'transcript_start':
@@ -94,6 +111,11 @@ function handleMessage(event: MessageEvent) {
 
     case 'sip_usage_data':
       window.dispatchEvent(new CustomEvent('sip_usage_data', { detail: msg }));
+      break;
+
+    case 'sip_user_switched':
+      auth.updatePermissions((msg as any).permissions);
+      ui.addLogEntry(`Switched to SIP: ${(msg as any).sipUser || 'All'}`);
       break;
 
     case 'permissions_updated':
