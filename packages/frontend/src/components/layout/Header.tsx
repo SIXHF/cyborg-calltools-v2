@@ -89,7 +89,19 @@ export function Header() {
           </span>
         )}
 
-        {/* Balance Display */}
+        {/* V1 header-right order: SIP selector, User badge, Balance, Logout, Status, Version */}
+
+        {/* 1. User badge (V1 line 984) */}
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-2xl text-[13px] font-medium"
+          style={{
+            background: role === 'admin' ? '#2d1b00' : role === 'user' ? '#1a1040' : '#0d2818',
+            color: role === 'admin' ? '#d29922' : role === 'user' ? '#8b5cf6' : '#3fb950',
+          }}>
+          <span className="w-2 h-2 rounded-full bg-current" />
+          {role === 'sip_user' ? `SIP/${username}` : `${roleLabel}: ${username}`}
+        </span>
+
+        {/* 2. Balance (V1 line 985-988) */}
         {showBalance && balance !== undefined && (
           <span
             className="inline-flex items-center gap-1 px-3 py-1 rounded-2xl text-[13px] font-semibold font-mono"
@@ -106,21 +118,16 @@ export function Header() {
           </span>
         )}
 
-        {version && (
-          <span className="text-[10px] text-ct-muted-dark font-mono hidden sm:inline">v{version}</span>
-        )}
-
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-2xl text-[13px] font-medium"
-          style={{
-            background: role === 'admin' ? '#2d1b00' : role === 'user' ? '#1a1040' : '#0d2818',
-            color: role === 'admin' ? '#d29922' : role === 'user' ? '#8b5cf6' : '#3fb950',
-          }}>
-          <span className="w-2 h-2 rounded-full bg-current" />
-          {role === 'sip_user' ? `SIP/${username}` : `${roleLabel}: ${username}`}
-        </span>
-
+        {/* 3. Logout (V1 line 989) */}
         <button onClick={logout} className="btn btn-sm btn-ghost">Logout</button>
+
+        {/* 4. Status badge (V1 line 990-993) */}
         <StatusBadge connected={wsConnected} />
+
+        {/* 5. Version (V1 line 994) */}
+        {version && (
+          <span className="text-[10px] text-ct-muted-dark font-mono hidden sm:inline" style={{ marginLeft: 4 }}>v{version}</span>
+        )}
       </div>
     </header>
   );
