@@ -21,9 +21,14 @@ export async function handleGetBalance(
   try {
     let userId: number | null = null;
 
-    // If admin/user has a selected SIP user, show that user's balance
+    // If admin/user has a selected SIP user or account, show that user's balance
     const targetSip = msg.targetSip || session.selectedSipUser;
-    if (targetSip && (session.role === 'admin' || session.role === 'user')) {
+    const targetAccount = msg.targetAccount || session.selectedAccount;
+    if (targetAccount && (session.role === 'admin' || session.role === 'user')) {
+      // Account selected — resolve user ID from username
+      const userRows = await dbQuery<{ id: number }>('SELECT id FROM pkg_user WHERE username = ? LIMIT 1', [targetAccount]);
+      if (userRows.length > 0) userId = userRows[0].id;
+    } else if (targetSip && (session.role === 'admin' || session.role === 'user')) {
       userId = await resolveUserId(targetSip);
     }
 
@@ -72,6 +77,7 @@ export async function handleGetRefillHistory(
   try {
     // V1 line 4998-5001: admin can filter by user ID via dropdown
     const targetSip = msg.targetSip || session.selectedSipUser;
+    const targetAccount = msg.targetAccount || session.selectedAccount;
     const filterUserId = msg.filterUserId;
 
     let whereClause = '';
@@ -81,18 +87,30 @@ export async function handleGetRefillHistory(
       // Admin filtering by specific user ID (V1: refillUserFilter dropdown)
       whereClause = 'id_user = ?';
       whereParams = [filterUserId];
-    } else if (session.role === 'admin' && !targetSip) {
+    } else if (session.role === 'admin' && targetAccount) {
+      // Admin with account selected — filter by that account's user ID
+      const userRows = await dbQuery<{ id: number }>('SELECT id FROM pkg_user WHERE username = ? LIMIT 1', [targetAccount]);
+      if (userRows.length > 0) {
+        whereClause = 'id_user = ?';
+        whereParams = [userRows[0].id];
+      } else {
+        whereClause = '1=0';
+      }
+    } else if (session.role === 'admin' && targetSip) {
+      // Admin with specific SIP selected
+      const userId = await resolveUserId(targetSip);
+      if (userId) {
+        whereClause = 'id_user = ?';
+        whereParams = [userId];
+      } else {
+        whereClause = '1=0';
+      }
+    } else if (session.role === 'admin' && !targetSip && !targetAccount) {
       // Admin with "All" selected — show ALL refills (V1: where = "1=1")
       whereClause = '1=1';
     } else {
-      // Resolve specific user
-      let userId: number | null = null;
-      if (targetSip) {
-        userId = await resolveUserId(targetSip);
-      }
-      if (!userId) {
-        userId = session.userId ?? null;
-      }
+      // Non-admin: show own refills
+      let userId: number | null = session.userId ?? null;
       if (!userId && session.sipUser) {
         userId = await resolveUserId(session.sipUser);
       }

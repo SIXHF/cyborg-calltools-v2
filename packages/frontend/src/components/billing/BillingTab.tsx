@@ -34,10 +34,15 @@ export function BillingTab() {
   const [userList, setUserList] = useState<{ id: number; username: string; credit: number }[]>([]);
   const usersMsg = useWsMessage<any>('users_overview');
 
+  // Resolve selected SIP/account for backend filtering
+  const targetSipParam = selectedSip?.startsWith('account:')
+    ? { targetAccount: selectedSip.slice('account:'.length) }
+    : selectedSip ? { targetSip: selectedSip } : {};
+
   // Re-fetch when SIP user changes
   useEffect(() => {
-    wsSend({ cmd: 'get_balance' });
-    wsSend({ cmd: 'get_refill_history', page: 1, perPage: 25 });
+    wsSend({ cmd: 'get_balance', ...targetSipParam });
+    wsSend({ cmd: 'get_refill_history', page: 1, perPage: 25, ...targetSipParam });
     // Admin: fetch user list for filter dropdown (V1 line 5154)
     if (role === 'admin') {
       wsSend({ cmd: 'get_users_overview' });
@@ -92,7 +97,7 @@ export function BillingTab() {
   const loadPage = (p: number, overrideFilterUserId?: number | undefined) => {
     setPage(p);
     const fuid = overrideFilterUserId !== undefined ? overrideFilterUserId : filterUserId;
-    wsSend({ cmd: 'get_refill_history', page: p, perPage: 25, ...(fuid ? { filterUserId: fuid } : {}) });
+    wsSend({ cmd: 'get_refill_history', page: p, perPage: 25, ...(fuid ? { filterUserId: fuid } : {}), ...targetSipParam });
   };
 
   const handleRecharge = () => {
