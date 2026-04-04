@@ -83,14 +83,14 @@ export async function handleGetCdr(
         `SELECT id, starttime, src, calledstation, sessiontime, ` +
         `terminatecauseid, id_trunk, sessionbill, callerid ` +
         `FROM pkg_cdr WHERE ${where} ` +
-        `ORDER BY id DESC LIMIT ?`,
+        `ORDER BY starttime DESC LIMIT ?`,
         [...params, fetchLimit]
       ),
       dbQuery<any>(
         `SELECT id, starttime, src, calledstation, 0 as sessiontime, ` +
         `terminatecauseid, id_trunk, 0 as sessionbill, callerid ` +
         `FROM pkg_cdr_failed WHERE ${where} ` +
-        `ORDER BY id DESC LIMIT ?`,
+        `ORDER BY starttime DESC LIMIT ?`,
         [...params, fetchLimit]
       ),
     ]);

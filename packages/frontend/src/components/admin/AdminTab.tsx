@@ -500,6 +500,8 @@ function ManualCreditPanel() {
   const [users, setUsers] = useState<any[]>([]);
   const usersMsg = useWsMessage<any>('users_overview');
 
+  // Fetch users on mount (Bug 20 fix — don't rely on UsersOverview being mounted)
+  useEffect(() => { wsSend({ cmd: 'get_users_overview' }); }, []);
   useEffect(() => { if (usersMsg?.users) setUsers(usersMsg.users); }, [usersMsg]);
 
   const doAddCredit = () => {

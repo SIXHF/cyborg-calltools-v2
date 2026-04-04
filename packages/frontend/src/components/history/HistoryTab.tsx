@@ -3,7 +3,7 @@ import { wsSend } from '../../hooks/useWebSocket';
 import { useWsMessage } from '../../hooks/useWsMessage';
 
 interface CdrRecord {
-  id: number;
+  id: string;
   startTime: string;
   src: string;
   destination: string;

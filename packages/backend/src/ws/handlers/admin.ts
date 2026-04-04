@@ -52,8 +52,8 @@ export async function handleGetStats(
       dbQuery<any>('SELECT id_trunk, COUNT(*) as cnt FROM pkg_cdr_failed WHERE starttime >= ? GROUP BY id_trunk', [shiftStart]),
       dbQuery<any>('SELECT calledstation, COUNT(*) as cnt FROM pkg_cdr WHERE starttime >= ? GROUP BY calledstation ORDER BY cnt DESC LIMIT 10', [shiftStart]),
       dbQuery<any>('SELECT id_trunk, AVG(sessiontime) as avg_session, SUM(buycost) as total_buy, COUNT(*) as call_count, SUM(sessionbill) as total_bill, SUM(sessiontime) as total_session FROM pkg_cdr WHERE starttime >= ? GROUP BY id_trunk', [shiftStart]),
-      dbQuery<any>('SELECT COALESCE(MAX(cps), 0) as v FROM pkg_status_system WHERE date >= ?', [shiftStart]),
-      dbQuery<any>('SELECT COALESCE(MAX(total), 0) as v FROM pkg_call_chart WHERE date >= ?', [shiftStart]),
+      dbQuery<any>('SELECT COALESCE(MAX(cps), 0) as v FROM pkg_status_system WHERE date >= ?', [shiftStart]).catch(() => [{ v: 0 }]),
+      dbQuery<any>('SELECT COALESCE(MAX(total), 0) as v FROM pkg_call_chart WHERE date >= ?', [shiftStart]).catch(() => [{ v: 0 }]),
       dbQuery<any>('SELECT COALESCE(SUM(credit), 0) as v FROM pkg_refill WHERE date >= ?', [shiftStart]),
       dbQuery<any>('SELECT COALESCE(MAX(sessiontime), 0) as v FROM pkg_cdr WHERE starttime >= ?', [shiftStart]),
       dbQuery<any>(
@@ -336,33 +336,33 @@ export async function handleGetUsersOverview(
       'FROM pkg_user u ORDER BY u.username'
     );
 
-    const result: any[] = [];
-    for (const u of users) {
-      // Get SIP users for this user
-      const sipRows = await dbQuery<any>(
-        'SELECT s.name, s.callerid, s.host, s.allow FROM pkg_sip s WHERE s.id_user = ?',
-        [u.id]
-      );
-
-      const sipUsers = sipRows.map((sr: any) => ({
+    // Fetch ALL SIP users in one query (Bug 15 fix — avoid N+1)
+    const allSipUsers = await dbQuery<any>(
+      'SELECT id_user, name, callerid, host, allow FROM pkg_sip ORDER BY name'
+    );
+    const sipByUser = new Map<number, any[]>();
+    for (const sr of allSipUsers) {
+      const uid = sr.id_user;
+      if (!sipByUser.has(uid)) sipByUser.set(uid, []);
+      sipByUser.get(uid)!.push({
         extension: sr.name,
         callerid: sr.callerid || '',
         host: sr.host || 'dynamic',
         codecs: sr.allow || '',
-      }));
-
-      result.push({
-        id: u.id,
-        username: u.username,
-        credit: parseFloat(String(u.credit)) || 0,
-        role: u.id_group === 1 ? 'admin' : 'user',
-        sipCount: u.sip_count || 0,
-        active: !!u.active,
-        lastRefill: u.last_refill || null,
-        lastRefillAmount: u.last_refill_amount ? parseFloat(String(u.last_refill_amount)) : null,
-        sipUsers,
       });
     }
+
+    const result = users.map((u: any) => ({
+      id: u.id,
+      username: u.username,
+      credit: parseFloat(String(u.credit)) || 0,
+      role: u.id_group === 1 ? 'admin' : 'user',
+      sipCount: u.sip_count || 0,
+      active: !!u.active,
+      lastRefill: u.last_refill || null,
+      lastRefillAmount: u.last_refill_amount ? parseFloat(String(u.last_refill_amount)) : null,
+      sipUsers: sipByUser.get(u.id) || [],
+    }));
 
     send(ws, { type: 'users_overview', users: result });
   } catch (err) {
