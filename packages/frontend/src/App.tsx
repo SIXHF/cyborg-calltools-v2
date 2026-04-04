@@ -12,6 +12,7 @@ import { SettingsTab } from './components/settings/SettingsTab';
 import { BillingTab } from './components/billing/BillingTab';
 import { AdminTab } from './components/admin/AdminTab';
 import { LiveTranscriptModal } from './components/tools/LiveTranscriptModal';
+import { DtmfCaptureModal } from './components/tools/DtmfCaptureModal';
 import { useUiStore } from './stores/uiStore';
 import { EventLogDrawer } from './components/shared/EventLogDrawer';
 
@@ -19,6 +20,7 @@ export function App() {
   const { isAuthenticated } = useAuthStore();
   const { activeTab } = useUiStore();
   const [transcriptChannel, setTranscriptChannel] = useState<string | null>(null);
+  const [dtmfInfo, setDtmfInfo] = useState<{ channel: string; sipUser: string } | null>(null);
 
   // Initialize WebSocket connection
   useWebSocket();
@@ -32,17 +34,28 @@ export function App() {
     setTranscriptChannel(null);
   }, []);
 
+  const handleDtmfStart = useCallback((e: Event) => {
+    const detail = (e as CustomEvent).detail;
+    setDtmfInfo({ channel: detail.channel, sipUser: detail.sipUser || '' });
+  }, []);
+
   useEffect(() => {
     window.addEventListener('transcript_start', handleTranscriptStart);
     window.addEventListener('transcript_done', handleTranscriptDone);
+    window.addEventListener('dtmf_start', handleDtmfStart);
     return () => {
       window.removeEventListener('transcript_start', handleTranscriptStart);
       window.removeEventListener('transcript_done', handleTranscriptDone);
+      window.removeEventListener('dtmf_start', handleDtmfStart);
     };
-  }, [handleTranscriptStart, handleTranscriptDone]);
+  }, [handleTranscriptStart, handleTranscriptDone, handleDtmfStart]);
 
   const handleCloseTranscript = useCallback(() => {
     setTranscriptChannel(null);
+  }, []);
+
+  const handleCloseDtmf = useCallback(() => {
+    setDtmfInfo(null);
   }, []);
 
   if (!isAuthenticated) {
@@ -68,6 +81,9 @@ export function App() {
       </main>
       {transcriptChannel && (
         <LiveTranscriptModal channel={transcriptChannel} onClose={handleCloseTranscript} />
+      )}
+      {dtmfInfo && (
+        <DtmfCaptureModal channel={dtmfInfo.channel} sipUser={dtmfInfo.sipUser} onClose={handleCloseDtmf} />
       )}
       <Toast />
       <EventLogDrawer />

@@ -135,7 +135,8 @@ function handleMessage(event: MessageEvent) {
       break;
 
     default:
-      ui.addLogEntry(`Unhandled message: ${(msg as any).type}`);
+      // All messages are dispatched via ws-message CustomEvent above
+      break;
   }
 }
 

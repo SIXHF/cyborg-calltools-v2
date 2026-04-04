@@ -24,6 +24,7 @@ import { handleStartListening as handleDtmfStart, handleStopListening as handleD
 import { handleCreatePayment } from './handlers/payment';
 import { handleListAudio, handleUploadAudio, handlePlayAudio, handleStopAudio, handleDeleteAudio, cleanupAudioState } from './handlers/audio';
 import { enrichChannels } from '../services/enrichment';
+import { startTranscription, stopTranscription } from '../services/transcription';
 import { handleGetMoh, handleSetMoh, handleUploadMoh, handleDeleteMoh } from './handlers/moh';
 import {
   handleGetStats,
@@ -437,10 +438,27 @@ async function handleStartTranscript(ws: ServerWebSocket<any>, session: SessionI
   }
   auditLog(session.username, session.role, session.ip, 'start_transcript', msg.channel);
   send(ws, { type: 'transcript_start', channel: msg.channel });
+
+  // Start real transcription via ElevenLabs/Whisper
+  try {
+    await startTranscription(ws, send, msg.channel, session.username);
+  } catch (err) {
+    console.error('[Transcript] Failed to start:', err);
+    send(ws, { type: 'error', message: 'Transcription service unavailable.', code: 'SERVICE_ERROR' });
+    send(ws, { type: 'transcript_done', channel: msg.channel });
+  }
 }
 
 async function handleStopTranscript(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {
   auditLog(session.username, session.role, session.ip, 'stop_transcript', msg.channel);
+
+  // Stop real transcription
+  try {
+    await stopTranscription(ws);
+  } catch (err) {
+    console.error('[Transcript] Failed to stop:', err);
+  }
+
   send(ws, { type: 'transcript_done', channel: msg.channel });
 }
 
