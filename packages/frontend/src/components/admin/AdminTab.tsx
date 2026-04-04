@@ -854,11 +854,11 @@ export function AdminTab() {
       {page === 'stats' && <StatsDashboard />}
       {page === 'settings' && (
         <div className="space-y-5">
-          <GlobalSettingsPanel />
-          <AccessControlPanel />
+          {isAdmin && <GlobalSettingsPanel />}
+          {isAdmin && <AccessControlPanel />}
           <PermissionsPanel />
-          <SessionsPanel />
-          <ManualCreditPanel />
+          {isAdmin && <SessionsPanel />}
+          {isAdmin && <ManualCreditPanel />}
           <AuditLogPanel />
         </div>
       )}
