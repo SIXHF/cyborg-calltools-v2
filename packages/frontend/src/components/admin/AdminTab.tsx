@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { useWsMessage } from '../../hooks/useWsMessage';
+import { IpRestrictionsPanel } from './IpRestrictionsPanel';
+import { RateLimitsPanel } from './RateLimitsPanel';
 
 type AdminPage = 'stats' | 'settings' | 'broadcast';
 
@@ -859,6 +861,8 @@ export function AdminTab() {
           <PermissionsPanel />
           {isAdmin && <SessionsPanel />}
           {isAdmin && <ManualCreditPanel />}
+          {isAdmin && <IpRestrictionsPanel />}
+          {isAdmin && <RateLimitsPanel />}
           <AuditLogPanel />
         </div>
       )}
