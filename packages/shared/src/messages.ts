@@ -224,5 +224,8 @@ export type ServerMessage =
   | { type: 'billing_update'; balance: number; currency: string }
   | { type: 'refill_history'; records: Record<string, unknown>[]; total: number; page: number; perPage: number }
   | { type: 'users_overview'; users: Record<string, unknown>[] }
+  | { type: 'payment_created'; payment_url: string; order_id: string; amount: string }
+  | { type: 'transfer_initiated'; channel: string; destination: string; transferType: string }
+  | { type: 'audit_log'; lines: string[] }
   | { type: 'error'; message: string; code?: string }
   | { type: 'pong' };

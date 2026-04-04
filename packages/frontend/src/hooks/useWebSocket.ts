@@ -96,15 +96,18 @@ function handleMessage(event: MessageEvent) {
     case 'callerid_updated':
       ui.addToast(`Caller ID updated: ${(msg as any).callerid || 'cleared'}`, 'success');
       ui.addLogEntry(`Caller ID for ${(msg as any).sipUser} set to ${(msg as any).callerid || '(cleared)'}`);
+      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
       break;
 
     case 'call_originated':
       ui.addToast(`Call originated to ${(msg as any).destination}`, 'success');
       ui.addLogEntry(`Call originated: ${(msg as any).sipUser} → ${(msg as any).destination}`);
+      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
       break;
 
     case 'cnam_result':
       ui.addLogEntry(`CNAM: ${(msg as any).number} → ${(msg as any).name}${(msg as any).carrier ? ` (${(msg as any).carrier})` : ''}`);
+      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
       break;
 
     case 'cdr_result':
@@ -114,19 +117,25 @@ function handleMessage(event: MessageEvent) {
     case 'users_overview':
     case 'online_users':
     case 'permissions_data':
-      // These are handled by individual components via store subscriptions
-      // Dispatch to a generic event handler
+    case 'audit_log':
+    case 'transfer_initiated':
+      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
+      break;
+
+    // Payment messages
+    case 'payment_created':
+      ui.addLogEntry(`Payment invoice created`);
       window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
       break;
 
     case 'permissions_updated':
       auth.updatePermissions(msg.permissions);
+      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
       break;
 
     case 'admin_broadcast':
       ui.addToast(`[${msg.from}] ${msg.message}`, 'info', 10000);
       ui.addLogEntry(`Broadcast from ${msg.from}: ${msg.message}`);
-      // Desktop notification
       if ('Notification' in window && Notification.permission === 'granted') {
         new Notification(`CallTools: ${msg.from}`, { body: msg.message });
       }
@@ -141,7 +150,9 @@ function handleMessage(event: MessageEvent) {
       break;
 
     default:
-      ui.addLogEntry(`Unhandled message: ${(msg as any).type}`);
+      // Dispatch unknown types to components too (future-proofing)
+      ui.addLogEntry(`Message: ${(msg as any).type}`);
+      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
   }
 }
 

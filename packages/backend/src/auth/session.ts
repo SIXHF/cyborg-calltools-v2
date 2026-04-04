@@ -88,11 +88,10 @@ export async function authenticate(username: string, password: string, clientIp:
   const allowed = await isAccountAllowed(username, clientIp, role);
   if (!allowed.ok) return { success: false, error: allowed.reason };
 
-  // Get SIP users managed by this account
-  const sipUsers = await dbQuery<{ name: string }>(
-    'SELECT name FROM pkg_sip WHERE id_user = ?',
-    [user.id]
-  );
+  // Get SIP users: admin sees ALL, user sees only their own
+  const sipUsers = role === 'admin'
+    ? await dbQuery<{ name: string }>('SELECT name FROM pkg_sip ORDER BY name')
+    : await dbQuery<{ name: string }>('SELECT name FROM pkg_sip WHERE id_user = ?', [user.id]);
 
   return {
     success: true,

@@ -5,19 +5,31 @@ import { useWsMessage } from '../../hooks/useWsMessage';
 
 export function SettingsTab() {
   const { sipUsers, role, permissions } = useAuthStore();
+  const globalSelectedSip = useAuthStore(s => s.selectedSipUser);
   const [callerid, setCallerid] = useState('');
-  const [selectedSip, setSelectedSip] = useState(sipUsers[0] ?? '');
+  const [selectedSip, setSelectedSip] = useState(globalSelectedSip || sipUsers[0] || '');
   const [saving, setSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState('');
 
   const calleridUpdate = useWsMessage<any>('callerid_updated');
 
   useEffect(() => {
-    if (calleridUpdate) setSaving(false);
+    if (calleridUpdate) {
+      setSaving(false);
+      setSavedMsg(`Saved: ${calleridUpdate.callerid || '(cleared)'}`);
+      setTimeout(() => setSavedMsg(''), 3000);
+    }
   }, [calleridUpdate]);
+
+  // Sync with global SIP selector
+  useEffect(() => {
+    if (globalSelectedSip) setSelectedSip(globalSelectedSip);
+  }, [globalSelectedSip]);
 
   const handleSetCallerid = () => {
     if (!selectedSip) return;
     setSaving(true);
+    setSavedMsg('');
     wsSend({ cmd: 'set_callerid', sipUser: selectedSip, callerid: callerid.trim() });
   };
 
@@ -71,9 +83,14 @@ export function SettingsTab() {
                   </button>
                 </div>
               </div>
+              {savedMsg && <div className="text-ct-green text-xs">{savedMsg}</div>}
+              {!selectedSip && (role === 'admin' || role === 'user') && (
+                <div className="text-ct-yellow text-xs">Select a specific SIP user to edit Caller ID.</div>
+              )}
               <button
                 onClick={() => { setCallerid(''); wsSend({ cmd: 'set_callerid', sipUser: selectedSip, callerid: '' }); }}
                 className="btn btn-sm"
+                disabled={!selectedSip}
               >
                 Clear Caller ID
               </button>
