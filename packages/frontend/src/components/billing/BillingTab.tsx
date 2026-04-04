@@ -164,6 +164,9 @@ export function BillingTab() {
         </div>
       </div>
 
+      {/* Manual Credit Adjustment (Admin only) */}
+      {role === 'admin' && <ManualCreditSection userList={userList} />}
+
       {/* Refill History */}
       <div className="glass-panel">
         <div className="panel-header">
@@ -226,6 +229,49 @@ export function BillingTab() {
             <button onClick={() => loadPage(page + 1)} disabled={page * 25 >= totalRefills} className="btn btn-sm">Next</button>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function ManualCreditSection({ userList }: { userList: { id: number; username: string; credit: number }[] }) {
+  const [targetUserId, setTargetUserId] = useState('');
+  const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
+  const creditMsg = useWsMessage<any>('credit_added');
+
+  useEffect(() => {
+    if (creditMsg) {
+      wsSend({ cmd: 'get_balance' });
+      wsSend({ cmd: 'get_refill_history', page: 1, perPage: 25 });
+      wsSend({ cmd: 'get_users_overview' });
+    }
+  }, [creditMsg]);
+
+  const doAddCredit = () => {
+    const uid = parseInt(targetUserId);
+    const amt = parseFloat(amount);
+    if (!uid || isNaN(amt) || !note.trim()) return;
+    wsSend({ cmd: 'add_credit', targetUserId: uid, amount: amt, note: note.trim() });
+    setAmount('');
+    setNote('');
+  };
+
+  return (
+    <div className="glass-panel">
+      <div className="panel-header"><h2>Manual Credit Adjustment</h2></div>
+      <div className="p-4 space-y-3">
+        <div className="flex gap-2 items-center flex-wrap">
+          <select value={targetUserId} onChange={e => setTargetUserId(e.target.value)} className="form-input !text-sm !w-48">
+            <option value="">Select user...</option>
+            {userList.map(u => <option key={u.id} value={u.id}>{u.username} (${u.credit.toFixed(2)})</option>)}
+          </select>
+          <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="Amount (+/-)" step="0.01" className="form-input !text-sm !w-32 font-mono" />
+        </div>
+        <div className="flex gap-2 items-center">
+          <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Reason / Note (required)" maxLength={200} className="form-input !text-sm flex-1" />
+          <button onClick={doAddCredit} disabled={!targetUserId || !amount || !note.trim()} className="btn btn-primary btn-sm">Apply</button>
+        </div>
       </div>
     </div>
   );

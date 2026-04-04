@@ -11,16 +11,17 @@ export function TabNav() {
   const [adminOpen, setAdminOpen] = useState(false);
   const adminRef = useRef<HTMLDivElement>(null);
 
-  // V1: Admin dropdown - close on click outside
+  // V1: Admin dropdown - close on click outside (use mousedown to avoid race with React onClick)
   useEffect(() => {
+    if (!adminOpen) return;
     const handler = (e: MouseEvent) => {
       if (adminRef.current && !adminRef.current.contains(e.target as Node)) {
         setAdminOpen(false);
       }
     };
-    document.addEventListener('click', handler);
-    return () => document.removeEventListener('click', handler);
-  }, []);
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [adminOpen]);
 
   const showAdmin = role === 'admin' || role === 'user';
   const showBilling = isAdmin || permissions.billing !== false;
@@ -39,9 +40,10 @@ export function TabNav() {
 
   return (
     <nav
-      className="tab-bar-gradient sticky top-[54px] z-[55] flex items-center gap-1 px-3 sm:px-6 py-2 overflow-x-auto"
+      className="tab-bar-gradient sticky top-[54px] z-[55] flex items-center gap-1 px-3 sm:px-6 py-2"
       role="tablist"
       aria-label="Main navigation"
+      style={{ overflow: adminOpen ? 'visible' : 'auto' }}
     >
       {/* V1 line 1091-1095: Regular tabs */}
       <button onClick={() => setActiveTab('monitor')} className={`tab-btn-v1 ${activeTab === 'monitor' ? 'active' : ''}`}>Monitor</button>
@@ -61,7 +63,8 @@ export function TabNav() {
           </button>
           {adminOpen && (
             <div className="absolute top-[calc(100%+4px)] left-0 z-[100] min-w-[130px] py-1 rounded-lg border border-ct-border-solid shadow-lg"
-              style={{ background: '#161b22', boxShadow: '0 4px 12px rgba(0,0,0,.4)' }}>
+              style={{ background: '#161b22', boxShadow: '0 4px 12px rgba(0,0,0,.4)' }}
+              onClick={(e) => e.stopPropagation()}>
               {/* V1 line 1099: Stats - admin only */}
               {isAdmin && (
                 <div onClick={() => switchAdminPage('stats')}

@@ -13,6 +13,7 @@ import { BillingTab } from './components/billing/BillingTab';
 import { AdminTab } from './components/admin/AdminTab';
 import { LiveTranscriptModal } from './components/tools/LiveTranscriptModal';
 import { useUiStore } from './stores/uiStore';
+import { EventLogDrawer } from './components/shared/EventLogDrawer';
 
 export function App() {
   const { isAuthenticated } = useAuthStore();
@@ -69,6 +70,7 @@ export function App() {
         <LiveTranscriptModal channel={transcriptChannel} onClose={handleCloseTranscript} />
       )}
       <Toast />
+      <EventLogDrawer />
     </div>
   );
 }
