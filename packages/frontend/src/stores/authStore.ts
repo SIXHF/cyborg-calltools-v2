@@ -1,14 +1,21 @@
 import { create } from 'zustand';
 import type { UserRole, Permissions } from '@calltools/shared';
 
+interface SipGroup {
+  account: string;
+  sipUsers: string[];
+}
+
 interface AuthState {
   isAuthenticated: boolean;
   token: string | null;
   username: string | null;
   role: UserRole | null;
   sipUsers: string[];
+  sipGroups: SipGroup[];
   permissions: Partial<Permissions>;
   version: string | null;
+  selectedSipUser: string | null;
 
   login: (data: {
     token: string;
@@ -17,10 +24,12 @@ interface AuthState {
     version: string;
     permissions: Record<string, boolean>;
     sipUsers: string[];
+    sipGroups?: SipGroup[];
   }) => void;
   resume: (data: { username: string; role: UserRole }) => void;
   logout: () => void;
   updatePermissions: (perms: Record<string, boolean>) => void;
+  setSelectedSipUser: (sip: string) => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -29,8 +38,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   username: null,
   role: null,
   sipUsers: [],
+  sipGroups: [],
   permissions: {},
   version: null,
+  selectedSipUser: null,
 
   login: (data) => {
     sessionStorage.setItem('ct2_session_token', data.token);
@@ -42,6 +53,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       version: data.version,
       permissions: data.permissions,
       sipUsers: data.sipUsers,
+      sipGroups: data.sipGroups ?? [],
     });
   },
 
@@ -61,6 +73,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       username: null,
       role: null,
       sipUsers: [],
+      sipGroups: [],
       permissions: {},
       version: null,
     });
@@ -68,5 +81,9 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   updatePermissions: (perms) => {
     set({ permissions: perms });
+  },
+
+  setSelectedSipUser: (sip) => {
+    set({ selectedSipUser: sip || null });
   },
 }));

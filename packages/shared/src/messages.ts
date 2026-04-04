@@ -37,10 +37,21 @@ export const StopTranscriptMessage = z.object({
   channel: z.string().min(1),
 });
 
+export const SwitchSipUserMessage = z.object({
+  cmd: z.literal('switch_sip_user'),
+  sipUser: z.string().optional(),
+  account: z.string().optional(),
+});
+
+export const GetCallerIdMessage = z.object({
+  cmd: z.literal('get_callerid'),
+  sipUser: z.string().optional(),
+});
+
 export const SetCallerIdMessage = z.object({
   cmd: z.literal('set_callerid'),
   sipUser: z.string().min(1),
-  callerid: z.string().min(1).max(20),
+  callerid: z.string().max(20),
 });
 
 export const OriginateCallMessage = z.object({
@@ -68,8 +79,74 @@ export const CnamLookupMessage = z.object({
 
 export const GetCdrMessage = z.object({
   cmd: z.literal('get_cdr'),
-  limit: z.number().int().min(1).max(100).default(50),
-  offset: z.number().int().min(0).default(0),
+  page: z.number().int().min(1).default(1),
+  perPage: z.number().int().min(1).max(50).default(25),
+  search: z.string().optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
+  targetSip: z.string().optional(),
+});
+
+export const TransferCallMessage = z.object({
+  cmd: z.literal('transfer_call'),
+  channel: z.string().min(1),
+  destination: z.string().min(1).max(64),
+  transferType: z.enum(['blind', 'attended']).default('blind'),
+});
+
+export const CreatePaymentMessage = z.object({
+  cmd: z.literal('create_payment'),
+  amount: z.number().min(50).max(10000),
+});
+
+export const GetBalanceMessage = z.object({
+  cmd: z.literal('get_balance'),
+});
+
+export const GetRefillHistoryMessage = z.object({
+  cmd: z.literal('get_refill_history'),
+  page: z.number().int().min(1).default(1),
+  perPage: z.number().int().min(1).max(50).default(25),
+});
+
+export const GetUsersOverviewMessage = z.object({
+  cmd: z.literal('get_users_overview'),
+});
+
+export const GetPermissionsMessage = z.object({
+  cmd: z.literal('get_permissions'),
+});
+
+export const GetSessionsMessage = z.object({
+  cmd: z.literal('get_sessions'),
+});
+
+export const SetGlobalSettingsMessage = z.object({
+  cmd: z.literal('set_global_settings'),
+  key: z.string().min(1),
+  value: z.boolean(),
+});
+
+export const GetAuditLogMessage = z.object({
+  cmd: z.literal('get_audit_log'),
+  actor: z.string().optional(),
+  action: z.string().optional(),
+});
+
+export const AddCreditMessage = z.object({
+  cmd: z.literal('add_credit'),
+  targetUserId: z.number().int(),
+  amount: z.number(),
+  note: z.string().min(1).max(200),
+});
+
+export const GetChannelsMessage = z.object({
+  cmd: z.literal('get_channels'),
+  targetSip: z.string().optional(),
+});
+
+export const GetSipInfoMessage = z.object({
+  cmd: z.literal('get_sip_info'),
 });
 
 export const GetStatsMessage = z.object({
@@ -80,17 +157,24 @@ export const GetStatsMessage = z.object({
 export const AdminSetPermissionsMessage = z.object({
   cmd: z.literal('admin_set_permissions'),
   target: z.string().min(1),
-  permissions: z.record(z.boolean()),
+  permissions: z.record(z.union([z.boolean(), z.string()])),
 });
 
 export const AdminForceLogoutMessage = z.object({
   cmd: z.literal('admin_force_logout'),
-  targetToken: z.string().length(64),
+  targetToken: z.string().min(1).max(64),
 });
 
 export const AdminBroadcastMessage = z.object({
   cmd: z.literal('admin_broadcast'),
   message: z.string().min(1).max(500),
+  color: z.enum(['orange', 'red', 'green']).optional(),
+});
+
+export const GetSipUsageMessage = z.object({
+  cmd: z.literal('get_sip_usage'),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
 });
 
 export const AdminClearRateLimitMessage = z.object({
@@ -113,18 +197,33 @@ export const ClientMessage = z.discriminatedUnion('cmd', [
   StopListeningMessage,
   StartTranscriptMessage,
   StopTranscriptMessage,
+  SwitchSipUserMessage,
+  GetCallerIdMessage,
   SetCallerIdMessage,
   OriginateCallMessage,
   UploadAudioMessage,
   PlayAudioMessage,
   CnamLookupMessage,
+  TransferCallMessage,
+  CreatePaymentMessage,
+  GetChannelsMessage,
+  GetSipInfoMessage,
   GetCdrMessage,
+  GetBalanceMessage,
+  GetRefillHistoryMessage,
+  GetUsersOverviewMessage,
+  GetPermissionsMessage,
+  GetSessionsMessage,
+  SetGlobalSettingsMessage,
+  GetAuditLogMessage,
+  AddCreditMessage,
   GetStatsMessage,
   AdminSetPermissionsMessage,
   AdminForceLogoutMessage,
   AdminBroadcastMessage,
   AdminClearRateLimitMessage,
   AdminApproveAudioMessage,
+  GetSipUsageMessage,
 ]);
 
 export type ClientMessageType = z.infer<typeof ClientMessage>;
@@ -132,7 +231,7 @@ export type ClientMessageType = z.infer<typeof ClientMessage>;
 // ── Server → Client Messages ────────────────────────────────────────
 
 export type ServerMessage =
-  | { type: 'auth_ok'; token: string; username: string; role: string; version: string; permissions: Record<string, boolean>; sipUsers: string[] }
+  | { type: 'auth_ok'; token: string; username: string; role: string; version: string; permissions: Record<string, boolean>; sipUsers: string[]; sipGroups?: Array<{ account: string; sipUsers: string[] }> }
   | { type: 'auth_error'; message: string }
   | { type: 'resume_ok'; username: string; role: string }
   | { type: 'resume_failed'; reason: string }
@@ -144,16 +243,27 @@ export type ServerMessage =
   | { type: 'transcript_update'; channel: string; speaker: string; text: string; isFinal: boolean }
   | { type: 'transcript_done'; channel: string }
   | { type: 'audio_stream'; channel: string; data: string }
-  | { type: 'cnam_result'; number: string; name: string; carrier?: string; lineType?: string }
+  | { type: 'cnam_result'; number: string; name: string; carrier?: string; lineType?: string; state?: string; city?: string }
   | { type: 'fraud_result'; number: string; score: number; riskLevel: string; flags: string[] }
-  | { type: 'cdr_result'; records: Record<string, unknown>[]; total: number }
+  | { type: 'cdr_result'; records: Record<string, unknown>[]; total: number; page?: number; perPage?: number }
   | { type: 'stats_result'; data: Record<string, unknown> }
+  | { type: 'sip_user_switched'; sipUser: string; permissions: Record<string, boolean>; callerid: string; tollfreeBlocked: boolean }
+  | { type: 'callerid_info'; sipUser: string; callerid: string }
   | { type: 'callerid_updated'; sipUser: string; callerid: string }
+  | { type: 'cnam_update'; cnam_map: Record<string, any> }
   | { type: 'callerid_blocked'; sipUser: string; reason: string }
   | { type: 'call_originated'; sipUser: string; destination: string }
-  | { type: 'online_users'; users: { username: string; role: string; sipUser?: string }[] }
-  | { type: 'admin_broadcast'; message: string; from: string }
+  | { type: 'online_users'; users: { username: string; role: string; sipUser?: string; ip?: string; connectedAt?: number }[] }
+  | { type: 'admin_broadcast'; message: string; from: string; color?: 'orange' | 'red' | 'green' }
+  | { type: 'sip_usage_result'; stats: Array<{ sipUser: string; answered: number; failed: number; total: number; minutes: number; cost: number; asr: number }>; totals: { answered: number; failed: number; total: number; minutes: number; cost: number } }
   | { type: 'permissions_updated'; permissions: Record<string, boolean> }
+  | { type: 'permissions_data'; config: Record<string, unknown> }
   | { type: 'billing_update'; balance: number; currency: string }
+  | { type: 'refill_history'; records: Record<string, unknown>[]; total: number; page: number; perPage: number }
+  | { type: 'users_overview'; users: Record<string, unknown>[] }
+  | { type: 'payment_created'; payment_url: string; order_id: string; amount: string }
+  | { type: 'transfer_initiated'; channel: string; destination: string; transferType: string }
+  | { type: 'audit_log'; lines: string[] }
+  | { type: 'sip_info'; extensions: Array<{ name: string; callerid: string; host: string; codecs: string; secret: string; registered: boolean }> }
   | { type: 'error'; message: string; code?: string }
   | { type: 'pong' };

@@ -1,7 +1,7 @@
 import type { ServerWebSocket } from 'bun';
 import type { AuthState, Permissions, UserRole } from '@calltools/shared';
 import { verifyPassword } from './verify';
-import { loadPermissions } from './permissions';
+import { loadPermissions, resolvePermissions } from './permissions';
 import { dbQuery } from '../db/mysql';
 
 const SESSION_RESUME_TTL = Number(process.env.SESSION_RESUME_TTL ?? 300) * 1000;
@@ -13,6 +13,7 @@ interface Session {
   userId?: number;
   sipUser?: string;
   sipUsers?: string[];
+  sipGroups?: Array<{ account: string; sipUsers: string[] }>;
   permissions: Record<string, boolean>;
   ip: string;
   connectedAt: number;
@@ -24,9 +25,14 @@ const activeSessions = new Map<string, Session>();
 const disconnectedSessions = new Map<string, Session>();
 const invalidatedTokens = new Set<string>();
 
+interface SipGroup {
+  account: string;
+  sipUsers: string[];
+}
+
 interface AuthResult {
   success: boolean;
-  user?: { username: string; role: UserRole; userId?: number; sipUser?: string; sipUsers?: string[] };
+  user?: { username: string; role: UserRole; userId?: number; sipUser?: string; sipUsers?: string[]; sipGroups?: SipGroup[] };
   error?: string;
 }
 
@@ -51,8 +57,15 @@ export async function authenticate(username: string, password: string, clientIp:
     const valid = await verifyPassword(password, sip.secret);
     if (!valid) return { success: false, error: 'Invalid credentials.' };
 
-    // Check if account is allowed
-    const allowed = await isAccountAllowed(username, clientIp, 'sip_user');
+    // Resolve parent account name for access control
+    const parentRows = await dbQuery<{ username: string }>(
+      'SELECT username FROM pkg_user WHERE id = ? LIMIT 1',
+      [sip.id_user]
+    );
+    const parentUsername = parentRows.length > 0 ? parentRows[0].username : username;
+
+    // Check if parent account is allowed
+    const allowed = await isAccountAllowed(parentUsername, clientIp, 'sip_user');
     if (!allowed.ok) return { success: false, error: allowed.reason };
 
     return {
@@ -81,11 +94,28 @@ export async function authenticate(username: string, password: string, clientIp:
   const allowed = await isAccountAllowed(username, clientIp, role);
   if (!allowed.ok) return { success: false, error: allowed.reason };
 
-  // Get SIP users managed by this account
-  const sipUsers = await dbQuery<{ name: string }>(
-    'SELECT name FROM pkg_sip WHERE id_user = ?',
-    [user.id]
-  );
+  // Get SIP users: admin sees ALL, user sees only their own
+  const sipUsers = role === 'admin'
+    ? await dbQuery<{ name: string }>('SELECT name FROM pkg_sip ORDER BY name')
+    : await dbQuery<{ name: string }>('SELECT name FROM pkg_sip WHERE id_user = ?', [user.id]);
+
+  // Build sipGroups (SIP users grouped by parent account)
+  const groupRows = role === 'admin'
+    ? await dbQuery<{ username: string; name: string }>(
+        'SELECT u.username, s.name FROM pkg_sip s JOIN pkg_user u ON s.id_user = u.id ORDER BY u.username, s.name'
+      )
+    : await dbQuery<{ username: string; name: string }>(
+        'SELECT u.username, s.name FROM pkg_sip s JOIN pkg_user u ON s.id_user = u.id WHERE s.id_user = ? ORDER BY u.username, s.name',
+        [user.id]
+      );
+
+  const groupMap = new Map<string, string[]>();
+  for (const row of groupRows) {
+    const list = groupMap.get(row.username) ?? [];
+    list.push(row.name);
+    groupMap.set(row.username, list);
+  }
+  const sipGroups: SipGroup[] = Array.from(groupMap.entries()).map(([account, sips]) => ({ account, sipUsers: sips }));
 
   return {
     success: true,
@@ -94,6 +124,7 @@ export async function authenticate(username: string, password: string, clientIp:
       role,
       userId: user.id,
       sipUsers: sipUsers.map(s => s.name),
+      sipGroups,
     },
   };
 }
@@ -104,8 +135,8 @@ async function isAccountAllowed(username: string, ip: string, role: UserRole): P
   // Admins are always allowed
   if (role === 'admin') return { ok: true };
 
-  // Check allowed_accounts list
-  if (perms.allowed_accounts && !perms.allowed_accounts.includes(username)) {
+  // Check allowed_accounts list (empty array = all allowed, only non-empty restricts)
+  if (perms.allowed_accounts?.length > 0 && !perms.allowed_accounts.includes(username)) {
     return { ok: false, reason: 'Account not enabled for CallTools.' };
   }
 
@@ -121,13 +152,19 @@ async function isAccountAllowed(username: string, ip: string, role: UserRole): P
   return { ok: true };
 }
 
-export function createSession(
+export async function createSession(
   user: NonNullable<AuthResult['user']>,
   ip: string,
   ws: ServerWebSocket<unknown>
-): Session {
+): Promise<Session> {
   const token = generateToken();
-  const permissions = {}; // Will be loaded from permissions file
+
+  // Resolve permissions from config file
+  const permissions = await resolvePermissions(
+    user.role,
+    user.sipUser ?? user.sipUsers?.[0],
+    user.userId?.toString()
+  );
 
   const session: Session = {
     token,
@@ -136,6 +173,7 @@ export function createSession(
     userId: user.userId,
     sipUser: user.sipUser,
     sipUsers: user.sipUsers,
+    sipGroups: user.sipGroups,
     permissions,
     ip,
     connectedAt: Date.now(),
@@ -146,7 +184,7 @@ export function createSession(
   return session;
 }
 
-export function resumeSession(token: string, clientIp: string): Session | null {
+export function resumeSession(token: string, clientIp: string, ws?: ServerWebSocket<unknown>): Session | null {
   if (invalidatedTokens.has(token)) return null;
 
   const session = disconnectedSessions.get(token);
@@ -161,9 +199,10 @@ export function resumeSession(token: string, clientIp: string): Session | null {
   // Check IP pinning
   if (session.ip !== clientIp) return null;
 
-  // Move back to active
+  // Move back to active and re-attach WebSocket
   disconnectedSessions.delete(token);
   session.disconnectedAt = undefined;
+  if (ws) session.ws = ws;
   activeSessions.set(token, session);
 
   return session;

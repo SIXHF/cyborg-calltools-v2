@@ -1,11 +1,20 @@
 import { type ServerWebSocket } from 'bun';
 import { ClientMessage, type ServerMessage } from '@calltools/shared';
-import { authenticate, resumeSession, createSession, destroySession, getSession } from './auth/session';
+import { authenticate, resumeSession, createSession, destroySession, getSession, disconnectSession } from './auth/session';
 import { checkRateLimit } from './ws/middleware';
-import { routeMessage } from './ws/router';
+import { routeMessage, setBroadcastFunction } from './ws/router';
 import { auditLog } from './audit/logger';
 import { initAmiClient } from './ami/client';
 import { initDatabase } from './db/mysql';
+import {
+  startChannelPolling,
+  onChannelsRefreshed,
+  getActiveChannels,
+  getUserChannels,
+  enrichWithTrunkInfo,
+  formatChannelsForClient,
+  type RawChannel,
+} from './ami/channels';
 
 const VERSION = '2.0.0-beta.1';
 
@@ -45,6 +54,51 @@ function untrackConnection(ws: ServerWebSocket<WsData>) {
   for (const [username, conns] of connectionsByUser) {
     conns.delete(ws);
     if (conns.size === 0) connectionsByUser.delete(username);
+  }
+}
+
+/**
+ * Broadcast any message to all authenticated clients.
+ */
+function broadcastToAll(msg: ServerMessage) {
+  for (const [_, conns] of connectionsByUser) {
+    for (const ws of conns) {
+      if (ws.data.token) {
+        try { send(ws, msg); } catch {}
+      }
+    }
+  }
+}
+
+// Wire up broadcast function for admin broadcast command
+setBroadcastFunction(broadcastToAll);
+
+/**
+ * Broadcast channel updates to all authenticated clients.
+ * Each client gets channels filtered by their role/permissions.
+ */
+async function broadcastChannels(allChannels: RawChannel[]) {
+  for (const [username, conns] of connectionsByUser) {
+    for (const ws of conns) {
+      if (!ws.data.token) continue;
+      const session = getSession(ws.data.token);
+      if (!session) continue;
+
+      try {
+        const sipUsers = session.sipUsers ?? (session.sipUser ? [session.sipUser] : []);
+        const userChannels = await getUserChannels(allChannels, session.role, sipUsers);
+
+        // Admin gets trunk info enrichment
+        if (session.role === 'admin') {
+          enrichWithTrunkInfo(userChannels, allChannels);
+        }
+
+        const formatted = formatChannelsForClient(userChannels, allChannels);
+        send(ws, { type: 'channel_update', channels: formatted });
+      } catch (err) {
+        console.error(`[WS] Failed to broadcast channels to ${username}:`, err);
+      }
+    }
   }
 }
 
@@ -137,8 +191,18 @@ const server = Bun.serve({
           return;
         }
 
-        const session = createSession(authResult.user!, clientIp, ws);
+        const session = await createSession(authResult.user!, clientIp, ws);
         ws.data.token = session.token;
+
+        // Fetch current callerid for the user's primary SIP extension
+        let currentCallerid = '';
+        const primarySip = session.sipUser ?? session.sipUsers?.[0];
+        if (primarySip) {
+          try {
+            const cidRows = await import('./db/mysql').then(m => m.dbQuery<any>('SELECT callerid FROM pkg_sip WHERE name = ? LIMIT 1', [primarySip]));
+            currentCallerid = cidRows[0]?.callerid || '';
+          } catch {}
+        }
 
         send(ws, {
           type: 'auth_ok',
@@ -148,6 +212,7 @@ const server = Bun.serve({
           version: VERSION,
           permissions: session.permissions as unknown as Record<string, boolean>,
           sipUsers: session.sipUsers ?? [],
+          sipGroups: authResult.user!.sipGroups,
         });
 
         auditLog(session.username, session.role, clientIp, 'login');
@@ -156,7 +221,7 @@ const server = Bun.serve({
 
       // Handle resume
       if (msg.cmd === 'resume') {
-        const session = resumeSession(msg.token, clientIp);
+        const session = resumeSession(msg.token, clientIp, ws);
         if (!session) {
           send(ws, { type: 'resume_failed', reason: 'Session expired or invalid.' });
           return;
@@ -168,11 +233,17 @@ const server = Bun.serve({
         }
 
         ws.data.token = session.token;
+        // Send full auth state on resume (V1 parity)
         send(ws, {
-          type: 'resume_ok',
+          type: 'auth_ok',
+          token: session.token,
           username: session.username,
           role: session.role,
-        });
+          version: VERSION,
+          permissions: session.permissions as unknown as Record<string, boolean>,
+          sipUsers: session.sipUsers ?? [],
+          sipGroups: session.sipGroups ?? [],
+        } as any);
 
         auditLog(session.username, session.role, clientIp, 'session_resume');
         return;
@@ -200,6 +271,8 @@ const server = Bun.serve({
         const session = getSession(ws.data.token);
         if (session) {
           auditLog(session.username, session.role, ws.data.ip, 'disconnect');
+          // Move session to disconnected state for resume (5-min TTL)
+          disconnectSession(ws.data.token);
         }
       }
       untrackConnection(ws);
@@ -221,6 +294,11 @@ async function init() {
   try {
     await initAmiClient();
     console.log('[CallTools V2] AMI connected.');
+
+    // Start channel polling and broadcasting
+    onChannelsRefreshed(broadcastChannels);
+    startChannelPolling(3000);
+    console.log('[CallTools V2] Channel polling started.');
   } catch (err) {
     console.error('[CallTools V2] AMI connection failed:', err);
   }

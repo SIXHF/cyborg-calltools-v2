@@ -21,9 +21,9 @@ export async function verifyPassword(password: string, storedHash: string): Prom
     return sha1 === storedHash.toLowerCase();
   }
 
-  // No plaintext comparison — reject unknown hash formats
-  console.warn('[Auth] Unknown hash format, rejecting authentication');
-  return false;
+  // Plaintext fallback — Magnus Billing stores SIP and some user passwords in plaintext
+  // This is required for V1 compatibility
+  return password === storedHash;
 }
 
 /**

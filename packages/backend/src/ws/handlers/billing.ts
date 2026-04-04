@@ -1,0 +1,99 @@
+import type { ServerWebSocket } from 'bun';
+import { dbQuery } from '../../db/mysql';
+
+type SendFn = (ws: ServerWebSocket<any>, msg: any) => void;
+
+/** Resolve user ID for a SIP user */
+async function resolveUserId(sipUser: string): Promise<number | null> {
+  const rows = await dbQuery<{ id_user: number }>(
+    'SELECT id_user FROM pkg_sip WHERE name = ? LIMIT 1',
+    [sipUser]
+  );
+  return rows.length > 0 ? rows[0].id_user : null;
+}
+
+export async function handleGetBalance(
+  ws: ServerWebSocket<any>,
+  session: any,
+  msg: any,
+  send: SendFn
+) {
+  try {
+    let userId: number | null = session.userId ?? null;
+
+    if (!userId && session.sipUser) {
+      userId = await resolveUserId(session.sipUser);
+    }
+
+    if (!userId) {
+      send(ws, { type: 'error', message: 'Could not resolve user account.', code: 'NOT_FOUND' });
+      return;
+    }
+
+    const rows = await dbQuery<{ credit: number }>(
+      'SELECT credit FROM pkg_user WHERE id = ? LIMIT 1',
+      [userId]
+    );
+
+    const credit = rows.length > 0 ? parseFloat(String(rows[0].credit)) || 0 : 0;
+
+    send(ws, {
+      type: 'billing_update',
+      balance: credit,
+      currency: 'USD',
+    });
+  } catch (err) {
+    console.error('[Billing] Error:', err);
+    send(ws, { type: 'error', message: 'Failed to get balance.', code: 'DB_ERROR' });
+  }
+}
+
+export async function handleGetRefillHistory(
+  ws: ServerWebSocket<any>,
+  session: any,
+  msg: any,
+  send: SendFn
+) {
+  const page = Math.max(1, msg.page ?? 1);
+  const perPage = Math.min(50, Math.max(1, msg.perPage ?? 25));
+  const offset = (page - 1) * perPage;
+
+  try {
+    let userId: number | null = session.userId ?? null;
+    if (!userId && session.sipUser) {
+      userId = await resolveUserId(session.sipUser);
+    }
+
+    if (!userId) {
+      send(ws, { type: 'error', message: 'Could not resolve user account.', code: 'NOT_FOUND' });
+      return;
+    }
+
+    const rows = await dbQuery<any>(
+      'SELECT id, date, credit, description, payment FROM pkg_refill WHERE id_user = ? ORDER BY id DESC LIMIT ? OFFSET ?',
+      [userId, perPage, offset]
+    );
+
+    const countRows = await dbQuery<{ cnt: number }>(
+      'SELECT COUNT(*) as cnt FROM pkg_refill WHERE id_user = ?',
+      [userId]
+    );
+
+    send(ws, {
+      type: 'refill_history',
+      records: rows.map(r => ({
+        id: r.id,
+        date: r.date,
+        credit: parseFloat(String(r.credit)) || 0,
+        description: r.description || '',
+        payment: r.payment || '',
+      })),
+      total: countRows[0]?.cnt ?? 0,
+      page,
+      perPage,
+    });
+  } catch (err) {
+    console.error('[Billing] Refill history error:', err);
+    send(ws, { type: 'error', message: 'Failed to get refill history.', code: 'DB_ERROR' });
+  }
+}

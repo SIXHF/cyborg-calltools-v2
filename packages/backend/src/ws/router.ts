@@ -3,6 +3,35 @@ import type { ServerMessage, ClientMessageType } from '@calltools/shared';
 import { auditLog } from '../audit/logger';
 import { destroySession } from '../auth/session';
 import { checkRateLimit } from './middleware';
+import {
+  getActiveChannels,
+  getUserChannels,
+  enrichWithTrunkInfo,
+  formatChannelsForClient,
+} from '../ami/channels';
+import { handleSetCallerId, handleGetCallerId } from './handlers/callerid';
+import { resolvePermissions } from '../auth/permissions';
+import { dbQuery } from '../db/mysql';
+import { handleOriginateCall } from './handlers/originate';
+import { handleTransferCall } from './handlers/transfer';
+import { handleGetCdr, handleGetSipUsage } from './handlers/cdr';
+import { handleGetBalance, handleGetRefillHistory } from './handlers/billing';
+import { handleCnamLookup } from './handlers/cnam';
+import { handleStartListening as handleDtmfStart, handleStopListening as handleDtmfStop } from './handlers/dtmf';
+import { handleCreatePayment } from './handlers/payment';
+import { enrichChannels } from '../services/enrichment';
+import {
+  handleGetStats,
+  handleGetPermissions,
+  handleSetPermissions,
+  handleGetSessions,
+  handleForceLogout,
+  handleBroadcast,
+  handleGetUsersOverview,
+  handleGetAuditLog,
+  handleAddCredit,
+  handleSetGlobalSettings,
+} from './handlers/admin';
 
 type SendFn = (ws: ServerWebSocket<any>, msg: ServerMessage) => void;
 
@@ -14,11 +43,17 @@ interface SessionInfo {
   sipUsers?: string[];
   permissions: Record<string, boolean>;
   ip: string;
+  userId?: number;
+}
+
+/** Callback for broadcasting to all clients */
+let broadcastFn: ((msg: any) => void) | null = null;
+export function setBroadcastFunction(fn: (msg: any) => void) {
+  broadcastFn = fn;
 }
 
 /**
  * Route authenticated messages to their handlers.
- * Each handler is responsible for permission checks and audit logging.
  */
 export async function routeMessage(
   ws: ServerWebSocket<any>,
@@ -44,12 +79,20 @@ export async function routeMessage(
       ws.close(1000, 'Logged out');
       break;
 
+    case 'get_channels':
+      await handleGetChannels(ws, session, msg, send);
+      break;
+
     case 'start_listening':
-      await handleStartListening(ws, session, msg, send);
+      if (!session.permissions.dtmf) {
+        send(ws, { type: 'error', message: 'DTMF monitoring not permitted.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleDtmfStart(ws, session, msg as any, send);
       break;
 
     case 'stop_listening':
-      await handleStopListening(ws, session, msg, send);
+      await handleDtmfStop(ws, session, msg as any, send);
       break;
 
     case 'start_transcript':
@@ -60,24 +103,112 @@ export async function routeMessage(
       await handleStopTranscript(ws, session, msg, send);
       break;
 
+    case 'switch_sip_user':
+      await handleSwitchSipUser(ws, session, msg as any, send);
+      break;
+
+    case 'get_callerid':
+      await handleGetCallerId(ws, session, msg as any, send);
+      break;
+
     case 'set_callerid':
-      await handleSetCallerId(ws, session, msg, send);
+      if (!session.permissions.caller_id) {
+        send(ws, { type: 'error', message: 'Caller ID management not permitted.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleSetCallerId(ws, session, msg as any, send);
       break;
 
     case 'originate_call':
-      await handleOriginateCall(ws, session, msg, send);
+      if (!session.permissions.quick_dial) {
+        send(ws, { type: 'error', message: 'Quick dial not permitted.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleOriginateCall(ws, session, msg as any, send);
       break;
 
     case 'cnam_lookup':
-      await handleCnamLookup(ws, session, msg, send);
+      if (!session.permissions.cnam_lookup) {
+        send(ws, { type: 'error', message: 'CNAM lookup not permitted.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleCnamLookup(ws, session, msg as any, send);
       break;
 
     case 'get_cdr':
-      await handleGetCdr(ws, session, msg, send);
+      if (!session.permissions.cdr) {
+        send(ws, { type: 'error', message: 'CDR access not permitted.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleGetCdr(ws, session, msg as any, send);
+      break;
+
+    case 'transfer_call':
+      await handleTransferCall(ws, session, msg as any, send);
+      break;
+
+    case 'get_sip_usage':
+      if (!session.permissions.cdr) {
+        send(ws, { type: 'error', message: 'CDR access not permitted.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleGetSipUsage(ws, session, msg as any, send);
+      break;
+
+    case 'create_payment':
+      if (!session.permissions.billing) {
+        send(ws, { type: 'error', message: 'Billing access not permitted.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleCreatePayment(ws, session, msg as any, send);
+      break;
+
+    case 'get_balance':
+      if (!session.permissions.billing) {
+        send(ws, { type: 'error', message: 'Billing access not permitted.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleGetBalance(ws, session, msg as any, send);
+      break;
+
+    case 'get_refill_history':
+      if (!session.permissions.billing) {
+        send(ws, { type: 'error', message: 'Billing access not permitted.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleGetRefillHistory(ws, session, msg as any, send);
       break;
 
     case 'get_stats':
-      await handleGetStats(ws, session, msg, send);
+      if (session.role !== 'admin') {
+        send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleGetStats(ws, session, msg as any, send);
+      break;
+
+    case 'get_users_overview':
+      if (session.role !== 'admin') {
+        send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleGetUsersOverview(ws, session, msg as any, send);
+      break;
+
+    case 'get_permissions':
+      if (session.role !== 'admin') {
+        send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleGetPermissions(ws, session, msg as any, send);
+      break;
+
+    case 'get_sessions':
+      if (session.role !== 'admin') {
+        send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleGetSessions(ws, session, msg as any, send);
       break;
 
     case 'upload_audio':
@@ -90,16 +221,72 @@ export async function routeMessage(
 
     // Admin commands
     case 'admin_set_permissions':
-    case 'admin_force_logout':
-    case 'admin_broadcast':
-    case 'admin_clear_rate_limit':
-    case 'admin_approve_audio':
       if (session.role !== 'admin') {
         send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' });
         auditLog(session.username, session.role, session.ip, 'admin_denied', cmd);
         return;
       }
-      await handleAdminCommand(ws, session, msg, send);
+      await handleSetPermissions(ws, session, msg as any, send);
+      break;
+
+    case 'admin_force_logout':
+      if (session.role !== 'admin') {
+        send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleForceLogout(ws, session, msg as any, send);
+      break;
+
+    case 'admin_broadcast':
+      if (session.role !== 'admin') {
+        send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleBroadcast(ws, session, msg as any, send, broadcastFn ?? undefined);
+      break;
+
+    case 'get_audit_log':
+      if (session.role !== 'admin') {
+        send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleGetAuditLog(ws, session, msg as any, send);
+      break;
+
+    case 'add_credit':
+      if (session.role !== 'admin') {
+        send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleAddCredit(ws, session, msg as any, send);
+      break;
+
+    case 'set_global_settings':
+      if (session.role !== 'admin') {
+        send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleSetGlobalSettings(ws, session, msg as any, send, broadcastFn ?? undefined);
+      break;
+
+    case 'admin_clear_rate_limit':
+      if (session.role !== 'admin') {
+        send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' });
+        return;
+      }
+      send(ws, { type: 'error', message: 'Rate limit clearing not yet implemented.', code: 'NOT_IMPLEMENTED' });
+      break;
+
+    case 'admin_approve_audio':
+      if (session.role !== 'admin') {
+        send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' });
+        return;
+      }
+      send(ws, { type: 'error', message: 'Audio approval not yet implemented.', code: 'NOT_IMPLEMENTED' });
+      break;
+
+    case 'get_sip_info':
+      await handleGetSipInfo(ws, session, send);
       break;
 
     default:
@@ -107,22 +294,73 @@ export async function routeMessage(
   }
 }
 
-// ── Handler stubs (to be implemented with full logic) ──────────────
+// ── Inline handlers ────────────────────────────────────────────────
 
-async function handleStartListening(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {
-  if (!session.permissions.dtmf) {
-    send(ws, { type: 'error', message: 'DTMF monitoring not permitted.', code: 'FORBIDDEN' });
-    auditLog(session.username, session.role, session.ip, 'permission_denied', 'dtmf');
-    return;
+async function handleGetChannels(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {
+  const allChannels = await getActiveChannels();
+  const sipUsers = session.sipUsers ?? (session.sipUser ? [session.sipUser] : []);
+  const targetSip = msg.targetSip || undefined;
+
+  if (targetSip && session.role !== 'admin') {
+    if (!sipUsers.includes(targetSip)) {
+      send(ws, { type: 'error', message: 'Target SIP user not in your scope.', code: 'FORBIDDEN' });
+      return;
+    }
   }
-  auditLog(session.username, session.role, session.ip, 'start_listening', msg.channel);
-  // TODO: Subscribe to AMI events for this channel
-  send(ws, { type: 'dtmf_start', channel: msg.channel, sipUser: session.sipUser ?? session.username });
+
+  const userChannels = await getUserChannels(allChannels, session.role, sipUsers, targetSip);
+  if (session.role === 'admin') {
+    enrichWithTrunkInfo(userChannels, allChannels);
+  }
+
+  const formatted = formatChannelsForClient(userChannels, allChannels);
+  send(ws, { type: 'channel_update', channels: formatted });
+
+  // Fire async CNAM + fraud enrichment (non-blocking, like V1's _send_cnam_update)
+  const canCnam = session.role === 'admin' || session.permissions.cnam_lookup !== false;
+  const canFraud = session.role === 'admin';
+  enrichChannels(ws, send, formatted, canCnam, canFraud).catch(err => console.error('[Enrich] error:', err));
 }
 
-async function handleStopListening(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {
-  auditLog(session.username, session.role, session.ip, 'stop_listening', msg.channel);
-  send(ws, { type: 'dtmf_done', channel: msg.channel });
+async function handleSwitchSipUser(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {
+  const sipUser = (msg.sipUser || '').trim();
+
+  // Ownership validation: non-admin can only switch to their own SIP users
+  if (sipUser && session.role !== 'admin') {
+    const ownedSips = session.sipUsers ?? (session.sipUser ? [session.sipUser] : []);
+    if (!ownedSips.includes(sipUser)) {
+      send(ws, { type: 'error', message: 'Access denied for this SIP user.', code: 'FORBIDDEN' });
+      return;
+    }
+  }
+
+  // Update session context
+  (session as any).selectedSipUser = sipUser || undefined;
+
+  // Resolve permissions for the selected SIP user
+  const perms = sipUser
+    ? await resolvePermissions(session.role, sipUser, session.userId?.toString())
+    : await resolvePermissions(session.role, session.sipUser, session.userId?.toString());
+  session.permissions = perms;
+
+  // Get callerid for the selected SIP user
+  let callerid = '';
+  let tollfreeBlocked = false;
+  if (sipUser) {
+    try {
+      const rows = await dbQuery<any>('SELECT callerid FROM pkg_sip WHERE name = ? LIMIT 1', [sipUser]);
+      callerid = rows[0]?.callerid || '';
+    } catch {}
+    tollfreeBlocked = !perms.allow_tollfree_callerid;
+  }
+
+  send(ws, {
+    type: 'sip_user_switched',
+    sipUser: sipUser || '',
+    permissions: perms,
+    callerid,
+    tollfreeBlocked,
+  });
 }
 
 async function handleStartTranscript(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {
@@ -140,74 +378,69 @@ async function handleStopTranscript(ws: ServerWebSocket<any>, session: SessionIn
   send(ws, { type: 'transcript_done', channel: msg.channel });
 }
 
-async function handleSetCallerId(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {
-  if (!session.permissions.caller_id) {
-    send(ws, { type: 'callerid_blocked', sipUser: msg.sipUser, reason: 'Caller ID changes not permitted.' });
-    auditLog(session.username, session.role, session.ip, 'permission_denied', 'caller_id');
-    return;
-  }
-  auditLog(session.username, session.role, session.ip, 'set_callerid', msg.sipUser, msg.callerid);
-  // TODO: Update caller ID in database
-  send(ws, { type: 'callerid_updated', sipUser: msg.sipUser, callerid: msg.callerid });
-}
-
-async function handleOriginateCall(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {
-  const rl = checkRateLimit(`call:${session.username}`, 1, 5_000);
-  if (!rl.allowed) {
-    send(ws, { type: 'error', message: 'Please wait before making another call.', code: 'RATE_LIMITED' });
-    return;
-  }
-  auditLog(session.username, session.role, session.ip, 'originate_call', msg.sipUser, msg.destination);
-  // TODO: Send AMI Originate action
-  send(ws, { type: 'call_originated', sipUser: msg.sipUser, destination: msg.destination });
-}
-
-async function handleCnamLookup(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {
-  if (!session.permissions.cnam_lookup) {
-    send(ws, { type: 'error', message: 'CNAM lookup not permitted.', code: 'FORBIDDEN' });
-    auditLog(session.username, session.role, session.ip, 'permission_denied', 'cnam_lookup');
-    return;
-  }
-  // TODO: Call Telnyx API
-  send(ws, { type: 'cnam_result', number: msg.number, name: 'Unknown' });
-}
-
-async function handleGetCdr(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {
-  if (!session.permissions.cdr) {
-    send(ws, { type: 'error', message: 'CDR access not permitted.', code: 'FORBIDDEN' });
-    auditLog(session.username, session.role, session.ip, 'permission_denied', 'cdr');
-    return;
-  }
-  // TODO: Query CDR from database
-  send(ws, { type: 'cdr_result', records: [], total: 0 });
-}
-
-async function handleGetStats(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {
-  // TODO: Compile stats
-  send(ws, { type: 'stats_result', data: {} });
-}
-
 async function handleUploadAudio(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {
   if (!session.permissions.audio_player) {
     send(ws, { type: 'error', message: 'Audio upload not permitted.', code: 'FORBIDDEN' });
-    auditLog(session.username, session.role, session.ip, 'permission_denied', 'audio_player');
     return;
   }
   auditLog(session.username, session.role, session.ip, 'upload_audio', msg.filename);
   // TODO: Save audio file, add to pending approvals
+  send(ws, { type: 'error', message: 'Audio upload not yet implemented.', code: 'NOT_IMPLEMENTED' });
 }
 
 async function handlePlayAudio(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {
   if (!session.permissions.audio_player) {
     send(ws, { type: 'error', message: 'Audio playback not permitted.', code: 'FORBIDDEN' });
-    auditLog(session.username, session.role, session.ip, 'permission_denied', 'audio_player');
     return;
   }
   // TODO: Stream audio via AMI
+  send(ws, { type: 'error', message: 'Audio playback not yet implemented.', code: 'NOT_IMPLEMENTED' });
 }
 
-async function handleAdminCommand(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {
-  auditLog(session.username, session.role, session.ip, `admin_${msg.cmd.replace('admin_', '')}`, JSON.stringify(msg));
-  // TODO: Implement admin handlers
-  send(ws, { type: 'error', message: 'Admin command handler not yet implemented.', code: 'NOT_IMPLEMENTED' });
+async function handleGetSipInfo(ws: ServerWebSocket<any>, session: SessionInfo, send: SendFn) {
+  try {
+    const sipUser = session.sipUser;
+    const userId = session.userId;
+
+    // Query SIP extensions for this user (admin sees all, user sees own, sip_user sees own)
+    const rows = session.role === 'admin'
+      ? await dbQuery<{ name: string; callerid: string; host: string; allow: string; secret: string }>(
+          'SELECT s.name, s.callerid, s.host, s.allow, s.secret FROM pkg_sip s ORDER BY s.name'
+        )
+      : await dbQuery<{ name: string; callerid: string; host: string; allow: string; secret: string }>(
+          'SELECT s.name, s.callerid, s.host, s.allow, s.secret FROM pkg_sip s WHERE s.id_user = ? OR s.name = ?',
+          [userId ?? 0, sipUser ?? '']
+        );
+
+    const extensions = await Promise.all(
+      rows.map(async (row) => {
+        // Check registration status via Asterisk CLI
+        let registered = false;
+        try {
+          const proc = Bun.spawn(['asterisk', '-rx', `sip show peer ${row.name}`], {
+            stdout: 'pipe',
+            stderr: 'pipe',
+          });
+          const output = await new Response(proc.stdout).text();
+          registered = output.includes('OK');
+        } catch {
+          // If asterisk command fails, assume unregistered
+        }
+
+        return {
+          name: row.name,
+          callerid: row.callerid || '',
+          host: row.host || '',
+          codecs: row.allow || '',
+          secret: session.role === 'admin' ? (row.secret || '') : '••••••',
+          registered,
+        };
+      })
+    );
+
+    send(ws, { type: 'sip_info', extensions });
+  } catch (err) {
+    console.error('[WS] get_sip_info error:', err);
+    send(ws, { type: 'error', message: 'Failed to fetch SIP info.', code: 'INTERNAL_ERROR' });
+  }
 }
