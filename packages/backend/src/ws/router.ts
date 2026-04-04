@@ -30,6 +30,7 @@ import {
   handleGetUsersOverview,
   handleGetAuditLog,
   handleAddCredit,
+  handleSetGlobalSettings,
 } from './handlers/admin';
 
 type SendFn = (ws: ServerWebSocket<any>, msg: ServerMessage) => void;
@@ -250,6 +251,14 @@ export async function routeMessage(
         return;
       }
       await handleAddCredit(ws, session, msg as any, send);
+      break;
+
+    case 'set_global_settings':
+      if (session.role !== 'admin') {
+        send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' });
+        return;
+      }
+      await handleSetGlobalSettings(ws, session, msg as any, send, broadcastFn ?? undefined);
       break;
 
     case 'admin_clear_rate_limit':

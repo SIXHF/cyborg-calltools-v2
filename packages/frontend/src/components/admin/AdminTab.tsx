@@ -147,6 +147,25 @@ function StatsDashboard() {
           </div>
         )}
 
+        {/* Top Error Caller IDs */}
+        {stats.top_error_callerids?.length > 0 && (
+          <div className="px-4 pb-4">
+            <h3 className="text-xs font-semibold text-ct-muted uppercase tracking-wider mb-2">Top Failed Caller IDs</h3>
+            <table className="data-table">
+              <thead><tr><th>Caller ID</th><th>Trunk</th><th>Failures</th></tr></thead>
+              <tbody>
+                {stats.top_error_callerids.map((c: any, i: number) => (
+                  <tr key={i}>
+                    <td className="font-mono text-ct-red">{c.number}</td>
+                    <td className="text-ct-muted">{c.trunk_name}</td>
+                    <td className="font-mono">{c.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
         {/* Error Breakdown by Trunk */}
         {stats.error_by_trunk?.length > 0 && (
           <div className="px-4 pb-4">
@@ -456,6 +475,51 @@ function AccessControlPanel() {
   );
 }
 
+// ── Global Settings Panel ──
+
+function GlobalSettingsPanel() {
+  const [config, setConfig] = useState<any>(null);
+  const permMsg = useWsMessage<any>('permissions_data');
+
+  useEffect(() => { wsSend({ cmd: 'get_permissions' }); }, []);
+  useEffect(() => { if (permMsg?.config) setConfig(permMsg.config); }, [permMsg]);
+
+  const defaults = config?.defaults || {};
+
+  const toggleGlobal = (key: string) => {
+    const newValue = !defaults[key];
+    wsSend({ cmd: 'set_global_settings', key, value: newValue });
+    // Optimistic update
+    setConfig({ ...config, defaults: { ...defaults, [key]: newValue } });
+  };
+
+  const globalSettings = [
+    { key: 'allow_tollfree_callerid', label: 'Allow Toll-Free Caller ID (18XX)', desc: 'When disabled, users cannot set toll-free numbers (800, 833, 844, 855, 866, 877, 888) as caller ID. Applies to all users.' },
+    { key: 'call_cost', label: 'Show Call Cost to Users', desc: 'Display real-time call cost and balance per channel for non-admin users.' },
+  ];
+
+  return (
+    <div className="glass-panel">
+      <div className="panel-header"><h2>Global Settings</h2></div>
+      <div>
+        {globalSettings.map(s => (
+          <div key={s.key} className="flex items-center justify-between px-5 py-3 border-b border-ct-border-solid/50 last:border-b-0">
+            <div>
+              <div className="text-[13px] text-ct-text-secondary font-medium">{s.label}</div>
+              <div className="text-[11px] text-ct-muted-dark mt-0.5">{s.desc}</div>
+            </div>
+            <label className="relative inline-block w-9 h-5 cursor-pointer">
+              <input type="checkbox" checked={defaults[s.key] !== false} onChange={() => toggleGlobal(s.key)} className="sr-only peer" />
+              <span className="absolute inset-0 rounded-full bg-ct-border-solid transition-colors peer-checked:bg-ct-green-dark" />
+              <span className="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-ct-text-secondary transition-transform peer-checked:translate-x-4" />
+            </label>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Audit Log Viewer ──
 
 function AuditLogPanel() {
@@ -574,6 +638,7 @@ export function AdminTab() {
       {page === 'stats' && <StatsDashboard />}
       {page === 'settings' && (
         <div className="space-y-5">
+          <GlobalSettingsPanel />
           <AccessControlPanel />
           <PermissionsPanel />
           <SessionsPanel />

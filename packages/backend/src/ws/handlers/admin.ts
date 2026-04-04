@@ -4,6 +4,7 @@ import { getActiveChannels } from '../../ami/channels';
 import { auditLog } from '../../audit/logger';
 import { getActiveSessions, destroySession } from '../../auth/session';
 import { readFile, writeFile } from 'fs/promises';
+import { resolvePermissions } from '../../auth/permissions';
 
 type SendFn = (ws: ServerWebSocket<any>, msg: any) => void;
 
@@ -371,6 +372,50 @@ export async function handleGetUsersOverview(
   }
 }
 
+export async function handleSetGlobalSettings(
+  ws: ServerWebSocket<any>,
+  session: any,
+  msg: any,
+  send: SendFn,
+  broadcastToAll?: (msg: any) => void
+) {
+  const { key, value } = msg;
+  if (!key) {
+    send(ws, { type: 'error', message: 'Missing setting key.', code: 'INVALID_INPUT' });
+    return;
+  }
+
+  try {
+    let config: any = {};
+    try { config = JSON.parse(await readFile(PERMISSIONS_FILE, 'utf-8')); } catch {}
+
+    if (!config.defaults) config.defaults = {};
+    config.defaults[key] = !!value;
+
+    await writeFile(PERMISSIONS_FILE, JSON.stringify(config, null, 2));
+    auditLog(session.username, session.role, session.ip, 'set_global_setting', key, String(value));
+
+    // Broadcast updated permissions to ALL connected clients
+    if (broadcastToAll) {
+      // Get all sessions and send refreshed permissions
+      const sessions = getActiveSessions();
+      for (const s of sessions) {
+        const perms = await resolvePermissions(s.role, s.sipUser, s.userId?.toString());
+        if (s.ws) {
+          try {
+            const wsAny = s.ws as any;
+            wsAny.send(JSON.stringify({ type: 'permissions_updated', permissions: perms }));
+          } catch {}
+        }
+      }
+    }
+
+    send(ws, { type: 'permissions_data', config });
+  } catch (err) {
+    send(ws, { type: 'error', message: 'Failed to save global setting.', code: 'FS_ERROR' });
+  }
+}
+
 export async function handleGetAuditLog(
   ws: ServerWebSocket<any>,
   session: any,
@@ -379,12 +424,27 @@ export async function handleGetAuditLog(
 ) {
   try {
     const raw = await readFile(AUDIT_LOG_FILE, 'utf-8').catch(() => '');
-    const lines = raw.split('\n').filter(l => l.trim()).reverse().slice(0, 200);
+    const rawLines = raw.split('\n').filter(l => l.trim()).reverse().slice(0, 200);
 
     const actorFilter = (msg.actor || '').trim().toLowerCase();
     const actionFilter = (msg.action || '').trim().toLowerCase();
 
-    const filtered = lines.filter(line => {
+    // Parse JSON lines and format them for display
+    const formatted = rawLines.map(line => {
+      try {
+        const entry = JSON.parse(line);
+        const ts = entry.ts ? new Date(entry.ts).toLocaleString() : '';
+        const parts = [ts, entry.actor, `[${entry.role}]`, entry.action];
+        if (entry.target) parts.push(`→ ${entry.target}`);
+        if (entry.detail) parts.push(`(${entry.detail})`);
+        if (entry.ip) parts.push(`from ${entry.ip}`);
+        return parts.join(' ');
+      } catch {
+        return line; // Return raw if not valid JSON
+      }
+    });
+
+    const filtered = formatted.filter(line => {
       if (actorFilter && !line.toLowerCase().includes(actorFilter)) return false;
       if (actionFilter && !line.toLowerCase().includes(actionFilter)) return false;
       return true;

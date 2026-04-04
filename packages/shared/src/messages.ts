@@ -121,6 +121,12 @@ export const GetSessionsMessage = z.object({
   cmd: z.literal('get_sessions'),
 });
 
+export const SetGlobalSettingsMessage = z.object({
+  cmd: z.literal('set_global_settings'),
+  key: z.string().min(1),
+  value: z.boolean(),
+});
+
 export const GetAuditLogMessage = z.object({
   cmd: z.literal('get_audit_log'),
   actor: z.string().optional(),
@@ -196,6 +202,7 @@ export const ClientMessage = z.discriminatedUnion('cmd', [
   GetUsersOverviewMessage,
   GetPermissionsMessage,
   GetSessionsMessage,
+  SetGlobalSettingsMessage,
   GetAuditLogMessage,
   AddCreditMessage,
   GetStatsMessage,
