@@ -109,7 +109,7 @@ export function Header() {
             color: role === 'admin' ? '#d29922' : role === 'user' ? '#8b5cf6' : '#3fb950',
           }}>
           <span className="w-2 h-2 rounded-full bg-current" />
-          {roleLabel}: {username}
+          {role === 'sip_user' ? `SIP/${username}` : `${roleLabel}: ${username}`}
         </span>
 
         <button onClick={logout} className="btn btn-sm btn-ghost">Logout</button>

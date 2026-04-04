@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useAuthStore } from '../../stores/authStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { useWsMessage } from '../../hooks/useWsMessage';
 
@@ -656,7 +657,7 @@ function saveBroadcastHistory(entries: BroadcastHistoryEntry[]) {
 
 function BroadcastPanel() {
   const [message, setMessage] = useState('');
-  const [color, setColor] = useState<'orange' | 'red' | 'green' | undefined>(undefined);
+  const [color, setColor] = useState<'orange' | 'red' | 'green'>('orange'); // V1 default: orange
   const [history, setHistory] = useState<BroadcastHistoryEntry[]>(loadBroadcastHistory);
   const [sessions, setSessions] = useState<any[]>([]);
   const sessionsMsg = useWsMessage<any>('online_users');
@@ -830,15 +831,25 @@ function BroadcastPanel() {
 // ── Main Admin Tab ──
 
 export function AdminTab() {
-  const [page, setPage] = useState<AdminPage>('stats');
+  const role = useAuthStore(s => s.role);
+  const isAdmin = role === 'admin';
+  // V1: 'user' role sees only Settings. Admin sees Dashboard/Settings/Broadcast.
+  const defaultPage: AdminPage = isAdmin ? 'stats' : 'settings';
+  const [page, setPage] = useState<AdminPage>(defaultPage);
+
+  const subPages: [AdminPage, string][] = isAdmin
+    ? [['stats', 'Dashboard'], ['settings', 'Settings'], ['broadcast', 'Broadcast']]
+    : [['settings', 'Settings']]; // user role only sees Settings
 
   return (
     <div className="space-y-4 animate-fade-in" role="tabpanel" id="panel-admin">
-      <div className="flex gap-1 overflow-x-auto">
-        {([['stats', 'Dashboard'], ['settings', 'Settings'], ['broadcast', 'Broadcast']] as const).map(([id, label]) => (
-          <button key={id} onClick={() => setPage(id)} className={`tab-btn-v1 ${page === id ? 'active' : ''}`}>{label}</button>
-        ))}
-      </div>
+      {subPages.length > 1 && (
+        <div className="flex gap-1 overflow-x-auto">
+          {subPages.map(([id, label]) => (
+            <button key={id} onClick={() => setPage(id)} className={`tab-btn-v1 ${page === id ? 'active' : ''}`}>{label}</button>
+          ))}
+        </div>
+      )}
 
       {page === 'stats' && <StatsDashboard />}
       {page === 'settings' && (
