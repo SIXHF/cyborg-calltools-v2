@@ -439,9 +439,13 @@ export async function handleGetUsersOverview(
     });
 
     // V1 line 5672-5674: filter out never-refilled users, sort by registered count desc
-    const filtered = result
-      .filter((u: any) => u.lastRefill !== null)
-      .sort((a: any, b: any) => (b.registeredCount || 0) - (a.registeredCount || 0));
+    // includeAll flag: return all users (for Access Control dropdown)
+    const includeAll = msg.includeAll === true;
+    const filtered = includeAll
+      ? result.sort((a: any, b: any) => a.username.localeCompare(b.username))
+      : result
+          .filter((u: any) => u.lastRefill !== null)
+          .sort((a: any, b: any) => (b.registeredCount || 0) - (a.registeredCount || 0));
 
     send(ws, { type: 'users_overview', users: filtered });
   } catch (err) {

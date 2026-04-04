@@ -202,6 +202,7 @@ export const PingMessage = z.object({
 // Admin commands
 export const GetUsersOverviewMessage = z.object({
   cmd: z.literal('get_users_overview'),
+  includeAll: z.boolean().optional(),
 });
 
 export const GetPermissionsMessage = z.object({

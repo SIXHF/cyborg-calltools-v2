@@ -504,7 +504,7 @@ function AccessControlPanel() {
   const permMsg = useWsMessage<any>('permissions_data');
   const usersMsg = useWsMessage<any>('users_overview');
 
-  useEffect(() => { wsSend({ cmd: 'get_permissions' }); wsSend({ cmd: 'get_users_overview' }); }, []);
+  useEffect(() => { wsSend({ cmd: 'get_permissions' }); wsSend({ cmd: 'get_users_overview', includeAll: true }); }, []);
   useEffect(() => { if (permMsg?.config) setConfig(permMsg.config); }, [permMsg]);
   useEffect(() => { if (usersMsg?.users) setAllUsers(usersMsg.users); }, [usersMsg]);
 
@@ -522,8 +522,8 @@ function AccessControlPanel() {
     setConfig({ ...config, allowed_accounts: allowedAccounts.filter(a => a !== name) });
   };
 
-  // Filter users not already in allowed list
-  const availableUsers = allUsers.filter(u => u.username && !allowedAccounts.includes(u.username) && u.role !== 'admin');
+  // Filter users not already in allowed list (show all non-admin users, including never-refilled)
+  const availableUsers = allUsers.filter(u => u.username && !allowedAccounts.includes(u.username));
 
   return (
     <div className="glass-panel">

