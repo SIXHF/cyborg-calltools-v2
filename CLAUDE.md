@@ -275,6 +275,23 @@ The WebSocket hook uses `Zustand.getState()` instead of React hooks to avoid rec
 
 ## Development Workflow
 
+### CRITICAL: V1 Is The Source of Truth — NEVER ASSUME
+- **NEVER assume** any value, threshold, color, behavior, layout, or UX flow
+- **ALWAYS read the actual V1 code** before implementing anything in V2
+- Every hardcoded number, color hex, threshold, timeout, label, format, sort order, and UI element MUST come directly from V1
+- If V1 uses `>= 200` for green trunk balance, use `>= 200` — do NOT guess `>= 50` or `>= 10`
+- If V1 shows status as "ANSWERED" (uppercase), use "ANSWERED" — do NOT change to "answered" (lowercase)
+- If V1 uses a dropdown, use a dropdown — do NOT substitute toggle buttons
+- If V1 formats cost as `$X.XX`, use that format — do NOT use `$X.XXXX`
+- When in doubt, READ THE V1 CODE. When not in doubt, STILL READ THE V1 CODE
+
+### Before Implementing ANY Feature
+1. Read the EXACT V1 implementation (both frontend HTML/JS and backend Python)
+2. Note every value: colors, thresholds, formats, labels, layout, behavior
+3. Implement in V2 using those EXACT values
+4. Verify the implementation matches V1 line by line
+5. Only THEN move to the next feature
+
 ### Multi-Agent Strategy
 Always use multiple agents in parallel to divide workload:
 - Launch 2-4 agents simultaneously for code reviews, audits, and research
@@ -288,4 +305,12 @@ Before any deploy, run parallel review agents checking:
 1. Frontend components: useEffect deps, stale closures, event dispatch
 2. Backend handlers: SQL injection, permission checks, async/await issues
 3. Message schema: Zod union completeness, router coverage, type mismatches
-4. V1 parity: feature-by-feature comparison against legacy code
+4. V1 parity: feature-by-feature comparison against legacy code — check EVERY value against V1
+
+### What NOT To Do
+- Do NOT assume thresholds, colors, or formats — READ V1
+- Do NOT invent new UX patterns — COPY V1
+- Do NOT change labels, button text, or error messages — USE V1's exact text
+- Do NOT deploy piecemeal fixes — COLLECT all issues, fix ALL at once
+- Do NOT skip reading V1 code because "I think I know what it does"
+- Do NOT substitute UI components (e.g., toggle buttons instead of dropdown) without explicit user approval
