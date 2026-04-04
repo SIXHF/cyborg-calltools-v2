@@ -110,7 +110,8 @@ export function LoginForm() {
         }}
       >
         {/* Auth Tabs */}
-        <div className="flex border-b border-ct-border-solid">
+        {/* V1 line 158-170: auth-tabs with rounded border container */}
+        <div className="flex mx-10 mt-5 mb-0 rounded-lg overflow-hidden border border-ct-border-solid">
           <button
             onClick={() => { setTab('login'); setSignupSuccess(null); }}
             className={`flex-1 py-2.5 text-center text-sm font-semibold transition-colors ${

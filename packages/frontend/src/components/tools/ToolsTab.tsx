@@ -301,17 +301,12 @@ export function ToolsTab() {
 
   return (
     <div className="space-y-5 animate-fade-in" role="tabpanel" id="panel-tools">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {(isAdmin || permissions.dtmf !== false) && <DtmfPanel />}
-        {(isAdmin || permissions.transcript !== false) && <TranscriptPanel />}
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {(isAdmin || permissions.cnam_lookup !== false) && <CnamLookupPanel />}
-        <BinLookupPanel />
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {(isAdmin || permissions.quick_dial !== false) && <QuickDialPanel />}
-      </div>
+      {/* V1 layout: single column stacked panels */}
+      {(isAdmin || permissions.transcript !== false) && <TranscriptPanel />}
+      {(isAdmin || permissions.dtmf !== false) && <DtmfPanel />}
+      {(isAdmin || permissions.quick_dial !== false) && <QuickDialPanel />}
+      {(isAdmin || permissions.cnam_lookup !== false) && <CnamLookupPanel />}
+      <BinLookupPanel />
     </div>
   );
 }

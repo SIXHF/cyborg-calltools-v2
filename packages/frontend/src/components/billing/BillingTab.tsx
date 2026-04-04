@@ -98,7 +98,7 @@ export function BillingTab() {
           <button onClick={() => wsSend({ cmd: 'get_balance' })} className="btn btn-sm">Refresh</button>
         </div>
         <div className="p-6 text-center">
-          <div className="text-4xl font-bold font-mono" style={{ color: balance !== null && balance < 1 ? '#f85149' : '#3fb950' }}>
+          <div className="text-[28px] font-bold font-mono" style={{ color: balance !== null && balance < 1 ? '#f85149' : '#3fb950' }}>
             {balance !== null ? `$${balance.toFixed(2)}` : '—'}
           </div>
           <div className="text-ct-muted text-sm mt-1">USDT Balance</div>

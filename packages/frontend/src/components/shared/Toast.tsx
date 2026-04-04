@@ -10,8 +10,8 @@ export function Toast() {
 
   return (
     <div
-      className="fixed bottom-10 right-4 left-4 sm:left-auto z-[9999] max-w-[400px]"
-      style={{ pointerEvents: 'auto' }}
+      className="fixed right-6 left-4 sm:left-auto z-[9999] max-w-[400px]"
+      style={{ bottom: 24, pointerEvents: 'auto' }}
       aria-live="polite"
     >
       <div
