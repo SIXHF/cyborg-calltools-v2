@@ -34,6 +34,35 @@ interface TranscriptState {
   elevenlabsWsTx: WebSocket | null;
 }
 
+// ── Whisper hallucination filtering (V1 parity: lines 2202-2240) ──
+const WHISPER_HALLUCINATIONS = new Set([
+  'thank you', 'thank you.', 'thank you!',
+  'thanks', 'thanks.', 'thanks!',
+  'thanks for watching', 'thanks for watching.',
+  'thanks for watching!', 'thank you for watching',
+  'thank you for watching.', 'thank you for watching!',
+  'bye', 'bye.', 'bye bye', 'bye bye.',
+  'goodbye', 'goodbye.', 'you', 'you.',
+  'the end', 'the end.', 'hmm', 'hmm.',
+  'uh', 'uh.', 'oh', 'oh.',
+  'so', 'so.', 'okay', 'okay.',
+  'ok, perfect', 'ok, perfect.',
+  'ok perfect', 'ok perfect.',
+  'perfect', 'perfect.',
+  'yes', 'yes.', 'no', 'no.',
+  'i', 'i.', 'um', 'um.',
+  'silence', 'silence.', 'music', 'music.',
+  'applause', 'applause.',
+  'subtitles by', 'subtitles by the amara.org community',
+  'thank you so much', 'thank you so much.',
+  'please subscribe', 'please subscribe.',
+  'like and subscribe', 'like and subscribe.',
+]);
+
+function isHallucination(text: string): boolean {
+  return WHISPER_HALLUCINATIONS.has(text.trim().toLowerCase());
+}
+
 /** Active transcriptions per WebSocket client */
 const activeTranscripts = new Map<ServerWebSocket<any>, TranscriptState>();
 let activeCount = 0;
@@ -120,7 +149,7 @@ async function elevenlabsScribeStream(
 
           if (msgType === 'partial_transcript') {
             const text = (msg.text ?? '').trim();
-            if (text) {
+            if (text && !isHallucination(text)) {
               try {
                 send(clientWs, {
                   type: 'transcript_update',
@@ -133,7 +162,7 @@ async function elevenlabsScribeStream(
             }
           } else if (msgType === 'committed_transcript' || msgType === 'committed_transcript_with_timestamps') {
             const text = (msg.text ?? '').trim();
-            if (text) {
+            if (text && !isHallucination(text)) {
               const ts = new Date().toLocaleTimeString('en-US', { hour12: false });
               state.lines.push({ text, time: ts, speaker });
               try {
@@ -258,7 +287,7 @@ async function whisperBatchStream(
 
         try {
           const result = await transcribeAudio(segment);
-          if (result.text) {
+          if (result.text && !isHallucination(result.text)) {
             const ts = new Date().toLocaleTimeString('en-US', { hour12: false });
             state.lines.push({ text: result.text, time: ts, speaker });
             try {
@@ -282,7 +311,7 @@ async function whisperBatchStream(
   if (audioBuffer.length > WHISPER_SAMPLE_RATE) {
     try {
       const result = await transcribeAudio(audioBuffer);
-      if (result.text) {
+      if (result.text && !isHallucination(result.text)) {
         const ts = new Date().toLocaleTimeString('en-US', { hour12: false });
         state.lines.push({ text: result.text, time: ts, speaker });
         try {
