@@ -37,10 +37,15 @@ export const StopTranscriptMessage = z.object({
   channel: z.string().min(1),
 });
 
+export const GetCallerIdMessage = z.object({
+  cmd: z.literal('get_callerid'),
+  sipUser: z.string().optional(),
+});
+
 export const SetCallerIdMessage = z.object({
   cmd: z.literal('set_callerid'),
   sipUser: z.string().min(1),
-  callerid: z.string().min(1).max(20),
+  callerid: z.string().max(20),
 });
 
 export const OriginateCallMessage = z.object({
@@ -136,7 +141,7 @@ export const GetStatsMessage = z.object({
 export const AdminSetPermissionsMessage = z.object({
   cmd: z.literal('admin_set_permissions'),
   target: z.string().min(1),
-  permissions: z.record(z.boolean()),
+  permissions: z.record(z.union([z.boolean(), z.string()])),
 });
 
 export const AdminForceLogoutMessage = z.object({
@@ -169,6 +174,7 @@ export const ClientMessage = z.discriminatedUnion('cmd', [
   StopListeningMessage,
   StartTranscriptMessage,
   StopTranscriptMessage,
+  GetCallerIdMessage,
   SetCallerIdMessage,
   OriginateCallMessage,
   UploadAudioMessage,
@@ -210,7 +216,7 @@ export type ServerMessage =
   | { type: 'transcript_update'; channel: string; speaker: string; text: string; isFinal: boolean }
   | { type: 'transcript_done'; channel: string }
   | { type: 'audio_stream'; channel: string; data: string }
-  | { type: 'cnam_result'; number: string; name: string; carrier?: string; lineType?: string }
+  | { type: 'cnam_result'; number: string; name: string; carrier?: string; lineType?: string; state?: string; city?: string }
   | { type: 'fraud_result'; number: string; score: number; riskLevel: string; flags: string[] }
   | { type: 'cdr_result'; records: Record<string, unknown>[]; total: number; page?: number; perPage?: number }
   | { type: 'stats_result'; data: Record<string, unknown> }

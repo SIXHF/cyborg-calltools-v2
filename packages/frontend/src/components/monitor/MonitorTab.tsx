@@ -178,7 +178,7 @@ function ChannelRow({ ch, canDtmf, canTranscript, canAudio, canCost, isAdmin }: 
 export function MonitorTab() {
   const { channels } = useChannelStore();
   const { role, permissions } = useAuthStore();
-  const refreshRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const selectedSip = useAuthStore(s => s.selectedSipUser);
   const [_, setTick] = useState(0);
 
   const isAdmin = role === 'admin';
@@ -187,23 +187,29 @@ export function MonitorTab() {
   const canAudio = isAdmin || permissions.audio_player !== false;
   const canCost = isAdmin || permissions.call_cost !== false;
 
-  // Request channel refresh every 3 seconds
+  // Force re-render every 3 seconds to update durations (server broadcasts channels automatically)
   useEffect(() => {
-    refreshRef.current = setInterval(() => {
-      wsSend({ cmd: 'get_channels' });
-      // Force re-render to update durations
-      setTick(t => t + 1);
-    }, 3000);
-    return () => {
-      if (refreshRef.current) clearInterval(refreshRef.current);
-    };
+    const interval = setInterval(() => setTick(t => t + 1), 3000);
+    return () => clearInterval(interval);
   }, []);
+
+  // Client-side SIP filter (Bug 10.1 fix: server broadcast sends all, we filter here)
+  const filteredChannels = selectedSip
+    ? channels.filter(ch => ch.sipUser === selectedSip)
+    : channels;
+
+  // Compute live durations client-side using startTime (Bug 9.2 fix)
+  const now = Date.now();
+  const withLiveDuration = filteredChannels.map(ch => ({
+    ...ch,
+    duration: ch.startTime ? Math.max(0, Math.floor((now - ch.startTime) / 1000)) : ch.duration,
+  }));
 
   // Split into connected and ringing, sorted by duration descending
   const sortByDur = (a: ExtendedChannel, b: ExtendedChannel) => (b.duration || 0) - (a.duration || 0);
-  const connected = channels.filter(ch => ch.state === 'answered').sort(sortByDur);
-  const ringing = channels.filter(ch => ch.state !== 'answered').sort(sortByDur);
-  const total = channels.length;
+  const connected = withLiveDuration.filter(ch => ch.state === 'answered').sort(sortByDur);
+  const ringing = withLiveDuration.filter(ch => ch.state !== 'answered').sort(sortByDur);
+  const total = withLiveDuration.length;
 
   return (
     <div className="glass-panel animate-fade-in" role="tabpanel" id="panel-monitor">

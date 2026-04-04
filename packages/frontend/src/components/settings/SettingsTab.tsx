@@ -26,6 +26,20 @@ export function SettingsTab() {
     if (globalSelectedSip) setSelectedSip(globalSelectedSip);
   }, [globalSelectedSip]);
 
+  // Fetch current caller ID on mount and when SIP user changes (Bug 3.1 fix)
+  useEffect(() => {
+    if (selectedSip) {
+      wsSend({ cmd: 'get_callerid', sipUser: selectedSip });
+    }
+  }, [selectedSip]);
+
+  // Update input when callerid is fetched
+  useEffect(() => {
+    if (calleridUpdate && calleridUpdate.sipUser === selectedSip) {
+      setCallerid(calleridUpdate.callerid || '');
+    }
+  }, [calleridUpdate, selectedSip]);
+
   const handleSetCallerid = () => {
     if (!selectedSip) return;
     setSaving(true);

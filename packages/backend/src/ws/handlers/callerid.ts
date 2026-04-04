@@ -19,6 +19,25 @@ function isTollfree(num: string): boolean {
   return prefixes.some(p => num.startsWith(p));
 }
 
+export async function handleGetCallerId(
+  ws: ServerWebSocket<any>,
+  session: any,
+  msg: any,
+  send: SendFn
+) {
+  const targetUser = msg.sipUser || session.sipUser || session.username;
+  try {
+    const rows = await dbQuery<{ callerid: string }>(
+      'SELECT callerid FROM pkg_sip WHERE name = ? LIMIT 1',
+      [targetUser]
+    );
+    const callerid = rows.length > 0 ? (rows[0].callerid || '') : '';
+    send(ws, { type: 'callerid_updated', sipUser: targetUser, callerid } as any);
+  } catch {
+    send(ws, { type: 'error', message: 'Failed to get caller ID.', code: 'DB_ERROR' });
+  }
+}
+
 export async function handleSetCallerId(
   ws: ServerWebSocket<any>,
   session: any,

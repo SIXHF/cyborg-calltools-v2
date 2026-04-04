@@ -69,43 +69,47 @@ export async function handleGetCdr(
   const where = conditions.length > 0 ? conditions.join(' AND ') : '1=1';
 
   try {
-    // Count total
-    const countRows = await dbQuery<{ cnt: number }>(
-      `SELECT COUNT(*) as cnt FROM pkg_cdr WHERE ${where}`,
-      params
-    );
-    const total = countRows[0]?.cnt ?? 0;
+    // Count total from BOTH tables (Bug 4.1 fix)
+    const [countCdr, countFailed] = await Promise.all([
+      dbQuery<{ cnt: number }>(`SELECT COUNT(*) as cnt FROM pkg_cdr WHERE ${where}`, params),
+      dbQuery<{ cnt: number }>(`SELECT COUNT(*) as cnt FROM pkg_cdr_failed WHERE ${where}`, params),
+    ]);
+    const total = (countCdr[0]?.cnt ?? 0) + (countFailed[0]?.cnt ?? 0);
 
-    // Fetch CDR records
-    const cdrRows = await dbQuery<any>(
-      `SELECT id, starttime, src, calledstation, sessiontime, ` +
-      `terminatecauseid, id_trunk, sessionbill, callerid ` +
-      `FROM pkg_cdr WHERE ${where} ` +
-      `ORDER BY id DESC LIMIT ? OFFSET ?`,
-      [...params, perPage, offset]
-    );
+    // Fetch more than needed from both tables for proper merge pagination (V1 approach)
+    const fetchLimit = perPage + offset;
+    const [cdrRows, failedRows] = await Promise.all([
+      dbQuery<any>(
+        `SELECT id, starttime, src, calledstation, sessiontime, ` +
+        `terminatecauseid, id_trunk, sessionbill, callerid ` +
+        `FROM pkg_cdr WHERE ${where} ` +
+        `ORDER BY id DESC LIMIT ?`,
+        [...params, fetchLimit]
+      ),
+      dbQuery<any>(
+        `SELECT id, starttime, src, calledstation, 0 as sessiontime, ` +
+        `terminatecauseid, id_trunk, 0 as sessionbill, callerid ` +
+        `FROM pkg_cdr_failed WHERE ${where} ` +
+        `ORDER BY id DESC LIMIT ?`,
+        [...params, fetchLimit]
+      ),
+    ]);
 
-    // Also fetch failed calls for the same criteria
-    const failedRows = await dbQuery<any>(
-      `SELECT id, starttime, src, calledstation, 0 as sessiontime, ` +
-      `terminatecauseid, id_trunk, 0 as sessionbill, callerid ` +
-      `FROM pkg_cdr_failed WHERE ${where} ` +
-      `ORDER BY id DESC LIMIT ? OFFSET ?`,
-      [...params, perPage, offset]
-    );
-
-    // Merge and sort by starttime descending
-    const allRecords = [...cdrRows, ...failedRows]
+    // Merge, sort, then apply offset+limit in code (V1 approach for correct pagination)
+    const allRecords = [
+      ...cdrRows.map((r: any) => ({ ...r, _source: 'cdr' })),
+      ...failedRows.map((r: any) => ({ ...r, _source: 'failed' })),
+    ]
       .sort((a, b) => {
         const ta = new Date(a.starttime).getTime();
         const tb = new Date(b.starttime).getTime();
         return tb - ta;
       })
-      .slice(0, perPage);
+      .slice(offset, offset + perPage);
 
-    // Format records
+    // Format records with unique IDs (Bug 4.3 fix)
     const records = allRecords.map(r => ({
-      id: r.id,
+      id: `${r._source}-${r.id}`,
       startTime: r.starttime,
       src: r.src,
       destination: r.calledstation,

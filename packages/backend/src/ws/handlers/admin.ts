@@ -154,7 +154,8 @@ export async function handleSetPermissions(
 
     await writeFile(PERMISSIONS_FILE, JSON.stringify(config, null, 2));
     auditLog(session.username, session.role, session.ip, 'set_permissions', target, JSON.stringify(permissions));
-    send(ws, { type: 'permissions_updated', permissions });
+    // Send back the full config so admin UI refreshes (Bug 6.1 fix)
+    send(ws, { type: 'permissions_data', config });
   } catch (err) {
     send(ws, { type: 'error', message: 'Failed to save permissions.', code: 'FS_ERROR' });
   }
@@ -200,6 +201,10 @@ export async function handleForceLogout(
     return;
   }
 
+  // Close the target's WebSocket connection (Bug 7.2 fix)
+  if (target.ws) {
+    try { (target.ws as any).close(1000, 'Force logged out by admin'); } catch {}
+  }
   destroySession(target.token);
   auditLog(session.username, session.role, session.ip, 'force_logout', target.username);
   send(ws, { type: 'admin_broadcast', message: `${target.username} was forcefully logged out.`, from: session.username });

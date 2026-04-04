@@ -9,7 +9,7 @@ import {
   enrichWithTrunkInfo,
   formatChannelsForClient,
 } from '../ami/channels';
-import { handleSetCallerId } from './handlers/callerid';
+import { handleSetCallerId, handleGetCallerId } from './handlers/callerid';
 import { handleOriginateCall } from './handlers/originate';
 import { handleTransferCall } from './handlers/transfer';
 import { handleGetCdr } from './handlers/cdr';
@@ -99,7 +99,15 @@ export async function routeMessage(
       await handleStopTranscript(ws, session, msg, send);
       break;
 
+    case 'get_callerid':
+      await handleGetCallerId(ws, session, msg as any, send);
+      break;
+
     case 'set_callerid':
+      if (!session.permissions.caller_id) {
+        send(ws, { type: 'error', message: 'Caller ID management not permitted.', code: 'FORBIDDEN' });
+        return;
+      }
       await handleSetCallerId(ws, session, msg as any, send);
       break;
 
@@ -108,10 +116,18 @@ export async function routeMessage(
       break;
 
     case 'cnam_lookup':
+      if (!session.permissions.cnam_lookup) {
+        send(ws, { type: 'error', message: 'CNAM lookup not permitted.', code: 'FORBIDDEN' });
+        return;
+      }
       await handleCnamLookup(ws, session, msg as any, send);
       break;
 
     case 'get_cdr':
+      if (!session.permissions.cdr) {
+        send(ws, { type: 'error', message: 'CDR access not permitted.', code: 'FORBIDDEN' });
+        return;
+      }
       await handleGetCdr(ws, session, msg as any, send);
       break;
 

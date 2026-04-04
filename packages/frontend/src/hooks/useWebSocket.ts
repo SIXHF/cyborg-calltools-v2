@@ -144,6 +144,8 @@ function handleMessage(event: MessageEvent) {
     case 'error':
       ui.addToast(msg.message, 'error');
       ui.addLogEntry(`Error: ${msg.message}`);
+      // Dispatch to components so they can react to errors (Bug 13 fix)
+      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
       break;
 
     case 'pong':

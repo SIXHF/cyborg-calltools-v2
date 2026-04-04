@@ -22,7 +22,7 @@ export function BillingTab() {
   const balanceMsg = useWsMessage<any>('billing_update');
   const refillMsg = useWsMessage<any>('refill_history');
   const paymentMsg = useWsMessage<any>('payment_created');
-  const paymentErrMsg = useWsMessage<any>('payment_error');
+  const errorMsg = useWsMessage<any>('error');
 
   useEffect(() => {
     wsSend({ cmd: 'get_balance' });
@@ -49,12 +49,13 @@ export function BillingTab() {
     }
   }, [paymentMsg]);
 
+  // Clear loading on any error (Bug 2.1 fix)
   useEffect(() => {
-    if (paymentErrMsg) {
+    if (errorMsg && rechargeLoading) {
       setRechargeLoading(false);
-      setRechargeStatus(`Error: ${paymentErrMsg.message || 'Unknown error'}`);
+      setRechargeStatus(`Error: ${errorMsg.message || 'Unknown error'}`);
     }
-  }, [paymentErrMsg]);
+  }, [errorMsg]);
 
   const loadPage = (p: number) => {
     setPage(p);
