@@ -2,6 +2,7 @@ import type { ServerWebSocket } from 'bun';
 import { readFile, writeFile } from 'fs/promises';
 import { auditLog } from '../../audit/logger';
 import { dbQuery } from '../../db/mysql';
+import { checkFraud } from '../../services/fraud';
 
 type SendFn = (ws: ServerWebSocket<any>, msg: any) => void;
 
@@ -154,7 +155,17 @@ export async function handleSetCallerId(
     }
 
     auditLog(session.username, session.role, session.ip, 'set_callerid', targetUser, validated);
-    send(ws, { type: 'callerid_updated', sipUser: targetUser, callerid: validated });
+
+    // Look up fraud score for the new caller ID (V1 parity: showFraudFeedback)
+    let fraudScore: number | undefined;
+    if (validated) {
+      try {
+        const fraud = await checkFraud(validated);
+        fraudScore = fraud?.score;
+      } catch {}
+    }
+
+    send(ws, { type: 'callerid_updated', sipUser: targetUser, callerid: validated, fraud_score: fraudScore } as any);
   } catch (err) {
     send(ws, { type: 'error', message: 'Failed to update caller ID.', code: 'DB_ERROR' });
   }

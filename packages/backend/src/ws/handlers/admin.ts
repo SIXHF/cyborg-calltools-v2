@@ -571,6 +571,14 @@ export async function handleAddCredit(
     const rows = await dbQuery<any>('SELECT credit FROM pkg_user WHERE id = ? LIMIT 1', [targetUserId]);
     const newBalance = rows[0]?.credit ?? 0;
 
+    // Send credit_added confirmation to the admin
+    send(ws, {
+      type: 'credit_added' as any,
+      targetUserId,
+      newBalance: parseFloat(String(newBalance)),
+    } as any);
+
+    // Also send a broadcast notification
     send(ws, {
       type: 'admin_broadcast' as any,
       message: `Credit adjusted: $${amount.toFixed(2)} for user #${targetUserId}. New balance: $${parseFloat(String(newBalance)).toFixed(2)}`,

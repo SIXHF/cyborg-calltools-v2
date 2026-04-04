@@ -476,7 +476,7 @@ async function handleStopTranscript(ws: ServerWebSocket<any>, session: SessionIn
 
   // Stop real transcription
   try {
-    await stopTranscription(ws);
+    await stopTranscription(ws, send, () => {});
   } catch (err) {
     console.error('[Transcript] Failed to stop:', err);
   }

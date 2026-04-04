@@ -119,8 +119,46 @@ function handleMessage(event: MessageEvent) {
       ui.addLogEntry(`Switched to SIP: ${(msg as any).sipUser || 'All'}`);
       break;
 
+    case 'call_originated':
+      ui.addToast(`Calling ${(msg as any).destination}`, 'success', 3000);
+      ui.addLogEntry(`Call originated: ${(msg as any).sipUser} → ${(msg as any).destination}`);
+      break;
+
+    case 'transfer_initiated':
+      ui.addToast('Transfer initiated', 'success', 3000);
+      ui.addLogEntry(`Transfer: ${(msg as any).channel} → ${(msg as any).destination} (${(msg as any).transfer_type || 'blind'})`);
+      break;
+
+    case 'callerid_updated':
+      ui.addToast('Caller ID updated', 'success', 3000);
+      ui.addLogEntry(`Caller ID set to: ${(msg as any).callerid || '(cleared)'}`);
+      break;
+
     case 'permissions_updated':
       auth.updatePermissions(msg.permissions);
+      ui.addToast('Permissions saved', 'success', 2000);
+      break;
+
+    case 'global_settings_updated':
+      ui.addToast('Global setting saved', 'success', 2000);
+      ui.addLogEntry(`Global setting: ${(msg as any).key} = ${(msg as any).value}`);
+      break;
+
+    case 'audio_uploaded':
+      ui.addToast(`Audio uploaded: ${(msg as any).name}`, 'success', 3000);
+      ui.addLogEntry(`Audio uploaded: ${(msg as any).name}`);
+      break;
+
+    case 'audio_playing':
+      ui.addLogEntry(`Playing audio: ${(msg as any).file || (msg as any).filename}`);
+      break;
+
+    case 'audio_stopped':
+      ui.addLogEntry('Audio playback stopped');
+      break;
+
+    case 'moh_updated':
+      ui.addToast((msg as any).using_default ? 'Hold music set to default' : 'Hold music updated', 'success', 3000);
       break;
 
     case 'admin_broadcast':
