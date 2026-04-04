@@ -157,7 +157,7 @@ function ChannelRow({ ch, canDtmf, canTranscript, canAudio, canCost, isAdmin, on
           {isUp && canAudio && (
             <button
               className="btn-call-action btn-play"
-              onClick={() => {/* TODO: open audio modal */}}
+              onClick={() => wsSend({ cmd: 'list_audio' })}
               title="Play Audio"
             >
               &#9654; Play

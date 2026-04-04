@@ -99,24 +99,26 @@ export async function handleGetRefillHistory(
       whereParams = [userId];
     }
 
+    // V1: admin sees username column in refill history
     const rows = await dbQuery<any>(
-      `SELECT id, date, credit, description, payment FROM pkg_refill WHERE ${whereClause} ORDER BY id DESC LIMIT ? OFFSET ?`,
+      `SELECT r.id, r.date, r.credit, r.description, r.payment, r.id_user, u.username FROM pkg_refill r LEFT JOIN pkg_user u ON r.id_user = u.id WHERE ${whereClause.replace('id_user', 'r.id_user')} ORDER BY r.id DESC LIMIT ? OFFSET ?`,
       [...whereParams, perPage, offset]
     );
 
     const countRows = await dbQuery<{ cnt: number }>(
-      `SELECT COUNT(*) as cnt FROM pkg_refill WHERE ${whereClause}`,
+      `SELECT COUNT(*) as cnt FROM pkg_refill r WHERE ${whereClause.replace('id_user', 'r.id_user')}`,
       whereParams
     );
 
     send(ws, {
       type: 'refill_history',
-      records: rows.map(r => ({
+      records: rows.map((r: any) => ({
         id: r.id,
         date: r.date,
         credit: parseFloat(String(r.credit)) || 0,
         description: r.description || '',
         payment: r.payment || '',
+        username: r.username || '',
       })),
       total: countRows[0]?.cnt ?? 0,
       page,

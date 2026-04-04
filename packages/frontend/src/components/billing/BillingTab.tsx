@@ -13,6 +13,7 @@ interface RefillRecord {
 
 export function BillingTab() {
   const [balance, setBalance] = useState<number | null>(null);
+  const role = useAuthStore(s => s.role);
   const [refills, setRefills] = useState<RefillRecord[]>([]);
   const [totalRefills, setTotalRefills] = useState(0);
   const [page, setPage] = useState(1);
@@ -159,15 +160,22 @@ export function BillingTab() {
           <div className="overflow-x-auto">
             <table className="data-table">
               <thead>
-                <tr><th>Date</th><th>Amount</th><th>Description</th><th>Payment</th></tr>
+                <tr>
+                  <th>Date</th>
+                  {role === 'admin' && <th>User</th>}
+                  <th>Amount</th>
+                  <th>Description</th>
+                </tr>
               </thead>
               <tbody>
                 {refills.map(r => (
                   <tr key={r.id}>
                     <td className="text-ct-muted text-xs whitespace-nowrap">{new Date(r.date).toLocaleDateString()}</td>
-                    <td className="font-mono text-ct-green font-semibold">${r.credit.toFixed(2)}</td>
+                    {role === 'admin' && <td className="text-ct-accent font-mono text-xs">{(r as any).username || '—'}</td>}
+                    <td className="font-mono font-semibold" style={{ color: r.credit >= 0 ? '#3fb950' : '#f85149' }}>
+                      {r.credit >= 0 ? '+' : ''}{r.credit.toFixed(2)}
+                    </td>
                     <td className="text-ct-text-secondary">{r.description || '—'}</td>
-                    <td className="text-ct-muted">{r.payment || '—'}</td>
                   </tr>
                 ))}
               </tbody>
