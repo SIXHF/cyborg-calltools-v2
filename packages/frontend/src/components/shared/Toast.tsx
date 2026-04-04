@@ -5,40 +5,35 @@ export function Toast() {
 
   if (toasts.length === 0) return null;
 
+  // Show only the latest toast (V1 behavior — single toast, not a stack)
+  const latest = toasts[toasts.length - 1];
+
   return (
-    <div className="fixed bottom-12 right-4 z-[9999] flex flex-col gap-2 max-w-sm" aria-live="polite">
-      {toasts.map((toast) => (
-        <div
-          key={toast.id}
-          className={`glass-panel px-4 py-3 rounded-lg shadow-lg flex items-start gap-3 animate-slide-in ${
-            toast.type === 'error'
-              ? 'border-ct-red/50'
-              : toast.type === 'success'
-              ? 'border-ct-green/50'
-              : 'border-ct-accent/50'
-          }`}
-          role="alert"
+    <div
+      className="fixed bottom-10 right-4 left-4 sm:left-auto z-[9999] max-w-[400px]"
+      style={{ pointerEvents: 'auto' }}
+      aria-live="polite"
+    >
+      <div
+        className={`px-4 py-2.5 rounded-lg text-[13px] font-medium shadow-lg border ${
+          latest.type === 'error'
+            ? 'bg-[#1a1117] border-ct-red text-ct-red'
+            : latest.type === 'success'
+            ? 'bg-ct-surface-solid border-ct-green text-ct-green'
+            : 'bg-ct-surface-solid border-ct-accent text-ct-text'
+        }`}
+        style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+        role="alert"
+      >
+        <span className="mr-2">{latest.message}</span>
+        <button
+          onClick={() => removeToast(latest.id)}
+          className="text-ct-muted hover:text-ct-text text-xs float-right"
+          aria-label="Dismiss"
         >
-          <span
-            className={`text-sm flex-1 ${
-              toast.type === 'error'
-                ? 'text-ct-red'
-                : toast.type === 'success'
-                ? 'text-ct-green'
-                : 'text-ct-text'
-            }`}
-          >
-            {toast.message}
-          </span>
-          <button
-            onClick={() => removeToast(toast.id)}
-            className="text-ct-muted hover:text-ct-text text-xs"
-            aria-label="Dismiss"
-          >
-            X
-          </button>
-        </div>
-      ))}
+          X
+        </button>
+      </div>
     </div>
   );
 }

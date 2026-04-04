@@ -278,12 +278,13 @@ export function HistoryTab() {
   const [dateTo, setDateTo] = useState('');
   const role = useAuthStore(s => s.role);
   const permissions = useAuthStore(s => s.permissions);
+  const selectedSip = useAuthStore(s => s.selectedSipUser);
 
   const cdrMsg = useWsMessage<any>('cdr_result');
 
   useEffect(() => {
     fetchCdr(1);
-  }, []);
+  }, [selectedSip]);
 
   useEffect(() => {
     if (cdrMsg) {
@@ -301,6 +302,7 @@ export function HistoryTab() {
       search: (overrides?.search ?? search) || undefined,
       dateFrom: (overrides?.dateFrom ?? dateFrom) || undefined,
       dateTo: (overrides?.dateTo ?? dateTo) || undefined,
+      targetSip: selectedSip || undefined,
     });
   };
 

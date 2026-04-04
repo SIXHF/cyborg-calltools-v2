@@ -4,7 +4,7 @@ import { getActiveChannels } from '../../ami/channels';
 import { auditLog } from '../../audit/logger';
 import { getActiveSessions, destroySession } from '../../auth/session';
 import { readFile, writeFile } from 'fs/promises';
-import { resolvePermissions } from '../../auth/permissions';
+import { resolvePermissions, invalidatePermissionCache } from '../../auth/permissions';
 
 type SendFn = (ws: ServerWebSocket<any>, msg: any) => void;
 
@@ -237,6 +237,7 @@ export async function handleSetPermissions(
         config.allowed_accounts = config.allowed_accounts.filter((a: string) => a !== account);
       }
       await writeFile(PERMISSIONS_FILE, JSON.stringify(config, null, 2));
+    invalidatePermissionCache();
       auditLog(session.username, session.role, session.ip, 'set_access', account, action);
       send(ws, { type: 'permissions_data', config });
       return;
@@ -263,6 +264,7 @@ export async function handleSetPermissions(
     }
 
     await writeFile(PERMISSIONS_FILE, JSON.stringify(config, null, 2));
+    invalidatePermissionCache();
 
     // Real-time broadcast: update affected clients' permissions (V1 parity)
     const sessions = getActiveSessions();
@@ -425,6 +427,7 @@ export async function handleSetGlobalSettings(
     config.defaults[key] = !!value;
 
     await writeFile(PERMISSIONS_FILE, JSON.stringify(config, null, 2));
+    invalidatePermissionCache();
     auditLog(session.username, session.role, session.ip, 'set_global_setting', key, String(value));
 
     // Broadcast updated permissions to ALL connected clients

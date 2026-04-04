@@ -72,7 +72,9 @@ export function SettingsTab() {
             <p className="text-ct-muted text-sm">Caller ID management is disabled for your account.</p>
           ) : (
             <>
-              {sipUsers.length > 1 && (
+              {/* Only show SIP selector for 'user' role with multiple SIPs.
+                  Admin uses the global header SIP selector. sip_user has only one. */}
+              {role === 'user' && sipUsers.length > 1 && (
                 <div>
                   <label className="block text-[13px] text-ct-muted mb-1.5">SIP User</label>
                   <select
@@ -85,6 +87,9 @@ export function SettingsTab() {
                     ))}
                   </select>
                 </div>
+              )}
+              {(role === 'admin' || role === 'sip_user') && selectedSip && (
+                <div className="text-[13px] text-ct-muted">Managing: <span className="text-ct-accent font-mono font-semibold">{selectedSip}</span></div>
               )}
               <div>
                 <label className="block text-[13px] text-ct-muted mb-1.5">
