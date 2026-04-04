@@ -225,8 +225,9 @@ export async function routeMessage(
       break;
 
     case 'get_permissions':
-      if (session.role !== 'admin') {
-        send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' });
+      // Admin and user roles can view permissions (users see their own SIP restrictions)
+      if (session.role === 'sip_user') {
+        send(ws, { type: 'error', message: 'Access denied.', code: 'FORBIDDEN' });
         return;
       }
       await handleGetPermissions(ws, session, msg as any, send);

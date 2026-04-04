@@ -166,8 +166,13 @@ function handleMessage(event: MessageEvent) {
       break;
 
     case 'error':
-      ui.addToast(msg.message, 'error');
-      ui.addLogEntry(`Error: ${msg.message}`);
+      // Don't show "Admin access required" errors to non-admin users (normal for user role)
+      if ((msg as any).code === 'FORBIDDEN' || msg.message === 'Admin access required.') {
+        ui.addLogEntry(`Error: ${msg.message}`);
+      } else {
+        ui.addToast(msg.message, 'error');
+        ui.addLogEntry(`Error: ${msg.message}`);
+      }
       break;
 
     case 'pong':
