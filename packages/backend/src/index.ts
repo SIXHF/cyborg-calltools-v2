@@ -1,6 +1,6 @@
 import { type ServerWebSocket } from 'bun';
 import { ClientMessage, type ServerMessage } from '@calltools/shared';
-import { authenticate, resumeSession, createSession, destroySession, getSession } from './auth/session';
+import { authenticate, resumeSession, createSession, destroySession, getSession, disconnectSession } from './auth/session';
 import { checkRateLimit } from './ws/middleware';
 import { routeMessage } from './ws/router';
 import { auditLog } from './audit/logger';
@@ -238,6 +238,8 @@ const server = Bun.serve({
         const session = getSession(ws.data.token);
         if (session) {
           auditLog(session.username, session.role, ws.data.ip, 'disconnect');
+          // Move session to disconnected state for resume (5-min TTL)
+          disconnectSession(ws.data.token);
         }
       }
       untrackConnection(ws);

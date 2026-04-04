@@ -1,36 +1,91 @@
+import { useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
+import { useAuthStore } from '../../stores/authStore';
 import { useUiStore } from '../../stores/uiStore';
+import { useChannelStore } from '../../stores/channelStore';
 import { StatusBadge } from './StatusBadge';
+import { wsSend } from '../../hooks/useWebSocket';
+import { useWsMessage } from '../../hooks/useWsMessage';
 
 export function Header() {
-  const { username, role, version, logout } = useAuth();
+  const { username, role, version, logout, sipUsers, permissions } = useAuth();
   const { wsConnected } = useUiStore();
+  const selectedSip = useAuthStore(s => s.selectedSipUser);
+  const setSelectedSip = useAuthStore(s => s.setSelectedSipUser);
+  const balanceMsg = useWsMessage<any>('billing_update');
 
   const roleLabel = role === 'admin' ? 'Admin' : role === 'user' ? 'User' : 'SIP';
+  const showSipSelector = (role === 'admin' || role === 'user') && sipUsers.length > 0;
+  const showBalance = permissions.billing !== false;
+
+  // Fetch balance on mount
+  useEffect(() => {
+    if (showBalance) wsSend({ cmd: 'get_balance' });
+  }, [showBalance]);
+
+  const balance = balanceMsg?.balance;
+
+  const handleSipChange = (value: string) => {
+    setSelectedSip(value);
+    // Refresh channels with new SIP filter
+    wsSend({ cmd: 'get_channels', targetSip: value || undefined });
+  };
 
   return (
     <header className="header-gradient px-6 py-3.5 flex items-center justify-between sticky top-0 z-[60]">
       <div className="flex items-center gap-4">
         <h1 className="text-xl font-semibold text-ct-accent tracking-wide">
           Call Tools <span className="beta-badge">BETA</span>{' '}
-          <span className="text-ct-muted font-normal text-base">/ Cyborg Telecom</span>
+          <span className="text-ct-muted font-normal text-base hidden sm:inline">/ Cyborg Telecom</span>
         </h1>
       </div>
 
       <div className="flex items-center gap-3">
-        {version && (
-          <span className="text-[10px] text-ct-muted-dark font-mono">v{version}</span>
+        {/* SIP User Selector */}
+        {showSipSelector && (
+          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border border-ct-border-solid" style={{ background: 'rgba(21,26,35,0.6)' }}>
+            <span className="text-[11px] text-ct-muted">SIP:</span>
+            <select
+              value={selectedSip ?? ''}
+              onChange={e => handleSipChange(e.target.value)}
+              className="bg-transparent border-none text-ct-accent text-[13px] font-mono outline-none cursor-pointer"
+              style={{ background: 'transparent' }}
+            >
+              <option value="" style={{ background: '#161b22', color: '#c9d1d9' }}>All</option>
+              {sipUsers.map(s => (
+                <option key={s} value={s} style={{ background: '#161b22', color: '#c9d1d9' }}>{s}</option>
+              ))}
+            </select>
+          </span>
         )}
+
+        {/* Balance Display */}
+        {showBalance && balance !== undefined && (
+          <span
+            className="inline-flex items-center gap-1 px-3 py-1 rounded-2xl text-[13px] font-semibold font-mono"
+            style={{ background: '#0d2818', color: '#3fb950' }}
+          >
+            <span>${typeof balance === 'number' ? balance.toFixed(2) : '—'}</span>
+            <button
+              onClick={() => useUiStore.getState().setActiveTab('billing')}
+              className="w-[22px] h-[22px] rounded-full bg-ct-green-dark text-white border-none text-base font-bold leading-none flex items-center justify-center hover:bg-[#2ea043] transition-colors"
+              title="Recharge"
+            >
+              +
+            </button>
+          </span>
+        )}
+
+        {version && (
+          <span className="text-[10px] text-ct-muted-dark font-mono hidden sm:inline">v{version}</span>
+        )}
+
         <span className="user-badge-v1">
           <span className="w-2 h-2 rounded-full bg-current" />
           {roleLabel}: {username}
         </span>
-        <button
-          onClick={logout}
-          className="btn btn-sm btn-ghost"
-        >
-          Logout
-        </button>
+
+        <button onClick={logout} className="btn btn-sm btn-ghost">Logout</button>
         <StatusBadge connected={wsConnected} />
       </div>
     </header>

@@ -9,6 +9,7 @@ interface AuthState {
   sipUsers: string[];
   permissions: Partial<Permissions>;
   version: string | null;
+  selectedSipUser: string | null;
 
   login: (data: {
     token: string;
@@ -21,6 +22,7 @@ interface AuthState {
   resume: (data: { username: string; role: UserRole }) => void;
   logout: () => void;
   updatePermissions: (perms: Record<string, boolean>) => void;
+  setSelectedSipUser: (sip: string) => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -31,6 +33,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   sipUsers: [],
   permissions: {},
   version: null,
+  selectedSipUser: null,
 
   login: (data) => {
     sessionStorage.setItem('ct2_session_token', data.token);
@@ -68,5 +71,9 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   updatePermissions: (perms) => {
     set({ permissions: perms });
+  },
+
+  setSelectedSipUser: (sip) => {
+    set({ selectedSipUser: sip || null });
   },
 }));

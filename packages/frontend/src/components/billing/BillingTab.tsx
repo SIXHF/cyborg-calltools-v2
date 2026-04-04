@@ -15,30 +15,61 @@ export function BillingTab() {
   const [refills, setRefills] = useState<RefillRecord[]>([]);
   const [totalRefills, setTotalRefills] = useState(0);
   const [page, setPage] = useState(1);
+  const [rechargeAmt, setRechargeAmt] = useState('');
+  const [rechargeStatus, setRechargeStatus] = useState('');
+  const [rechargeLoading, setRechargeLoading] = useState(false);
 
   const balanceMsg = useWsMessage<any>('billing_update');
   const refillMsg = useWsMessage<any>('refill_history');
+  const paymentMsg = useWsMessage<any>('payment_created');
+  const paymentErrMsg = useWsMessage<any>('payment_error');
 
-  // Fetch on mount
   useEffect(() => {
     wsSend({ cmd: 'get_balance' });
     wsSend({ cmd: 'get_refill_history', page: 1, perPage: 25 });
   }, []);
 
+  useEffect(() => { if (balanceMsg) setBalance(balanceMsg.balance); }, [balanceMsg]);
   useEffect(() => {
-    if (balanceMsg) setBalance(balanceMsg.balance);
-  }, [balanceMsg]);
+    if (refillMsg) { setRefills(refillMsg.records ?? []); setTotalRefills(refillMsg.total ?? 0); }
+  }, [refillMsg]);
 
   useEffect(() => {
-    if (refillMsg) {
-      setRefills(refillMsg.records ?? []);
-      setTotalRefills(refillMsg.total ?? 0);
+    if (paymentMsg) {
+      setRechargeLoading(false);
+      const url = paymentMsg.payment_url;
+      if (url) {
+        const win = window.open(url, '_blank');
+        if (!win) {
+          setRechargeStatus(`<a href="${url}" target="_blank" rel="noopener" class="text-ct-accent underline font-bold">Click here to open the payment page</a>`);
+        } else {
+          setRechargeStatus('Invoice created! Payment page opened in new tab.');
+        }
+      }
     }
-  }, [refillMsg]);
+  }, [paymentMsg]);
+
+  useEffect(() => {
+    if (paymentErrMsg) {
+      setRechargeLoading(false);
+      setRechargeStatus(`Error: ${paymentErrMsg.message || 'Unknown error'}`);
+    }
+  }, [paymentErrMsg]);
 
   const loadPage = (p: number) => {
     setPage(p);
     wsSend({ cmd: 'get_refill_history', page: p, perPage: 25 });
+  };
+
+  const handleRecharge = () => {
+    const amt = parseFloat(rechargeAmt);
+    if (isNaN(amt) || amt < 50 || amt > 10000) {
+      setRechargeStatus('Minimum $50, maximum $10,000.');
+      return;
+    }
+    setRechargeLoading(true);
+    setRechargeStatus('Creating Heleket invoice...');
+    wsSend({ cmd: 'create_payment', amount: amt });
   };
 
   return (
@@ -53,7 +84,46 @@ export function BillingTab() {
           <div className="text-4xl font-bold font-mono" style={{ color: balance !== null && balance < 1 ? '#f85149' : '#3fb950' }}>
             {balance !== null ? `$${balance.toFixed(2)}` : '—'}
           </div>
-          <div className="text-ct-muted text-sm mt-1">Current Credit Balance</div>
+          <div className="text-ct-muted text-sm mt-1">USDT Balance</div>
+        </div>
+      </div>
+
+      {/* Recharge with USDT */}
+      <div className="glass-panel">
+        <div className="panel-header">
+          <h2>Recharge with USDT</h2>
+        </div>
+        <div className="p-4 space-y-3">
+          <div className="flex gap-2 flex-wrap">
+            {[50, 100, 250, 500].map(amt => (
+              <button key={amt} onClick={() => setRechargeAmt(String(amt))} className="btn btn-sm">
+                ${amt}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2 items-center flex-wrap">
+            <input
+              type="number"
+              value={rechargeAmt}
+              onChange={e => setRechargeAmt(e.target.value)}
+              placeholder="Min $50"
+              min={50}
+              max={10000}
+              step={0.01}
+              className="form-input !w-40 font-mono"
+            />
+            <button onClick={handleRecharge} disabled={rechargeLoading} className="btn btn-primary">
+              {rechargeLoading ? 'Creating invoice...' : 'Recharge'}
+            </button>
+          </div>
+          {rechargeStatus && (
+            <div
+              className="text-[13px]"
+              style={{ color: rechargeStatus.includes('Error') ? '#f85149' : rechargeStatus.includes('invoice') ? '#d29922' : '#3fb950' }}
+              dangerouslySetInnerHTML={{ __html: rechargeStatus }}
+            />
+          )}
+          <div className="text-[11px] text-ct-muted-dark">0.4% processing fee may apply. Invoice valid for 1 hour.</div>
         </div>
       </div>
 
@@ -69,12 +139,7 @@ export function BillingTab() {
           <div className="overflow-x-auto">
             <table className="data-table">
               <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Amount</th>
-                  <th>Description</th>
-                  <th>Payment</th>
-                </tr>
+                <tr><th>Date</th><th>Amount</th><th>Description</th><th>Payment</th></tr>
               </thead>
               <tbody>
                 {refills.map(r => (
