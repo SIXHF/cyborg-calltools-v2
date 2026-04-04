@@ -346,13 +346,25 @@ export async function handleBroadcast(
   }
 
   const color = msg.color || undefined;
+  const targets: string[] = msg.targets || []; // array of usernames to target (empty = all)
   auditLog(session.username, session.role, session.ip, 'broadcast', message);
 
-  if (broadcastToAll) {
-    broadcastToAll({ type: 'admin_broadcast', message, from: session.username, ...(color ? { color } : {}) });
-  }
+  const broadcastMsg = { type: 'admin_broadcast', message, from: session.username, ...(color ? { color } : {}) };
 
-  send(ws, { type: 'admin_broadcast', message: `Broadcast sent: "${message}"`, from: 'system' });
+  if (targets.length > 0) {
+    // Targeted broadcast — send only to specific users
+    const sessions = getActiveSessions();
+    let delivered = 0;
+    for (const s of sessions) {
+      if (targets.includes(s.username) && s.ws) {
+        try { (s.ws as any).send(JSON.stringify(broadcastMsg)); delivered++; } catch {}
+      }
+    }
+    send(ws, { type: 'admin_broadcast', message: `Broadcast sent to ${delivered} user(s): "${message}"`, from: 'system' } as any);
+  } else if (broadcastToAll) {
+    broadcastToAll(broadcastMsg);
+    send(ws, { type: 'admin_broadcast', message: `Broadcast sent to all: "${message}"`, from: 'system' } as any);
+  }
 }
 
 export async function handleGetUsersOverview(

@@ -640,10 +640,21 @@ function BroadcastPanel() {
 
   useEffect(() => { if (sessionsMsg?.users) setSessions(sessionsMsg.users); }, [sessionsMsg]);
 
+  const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
+
+  const toggleTarget = (username: string) => {
+    setSelectedTargets(prev => prev.includes(username) ? prev.filter(u => u !== username) : [...prev, username]);
+  };
+
   const sendBroadcast = () => {
     if (!message.trim()) return;
     const entry: BroadcastHistoryEntry = { timestamp: Date.now(), message: message.trim(), color };
-    wsSend({ cmd: 'admin_broadcast', message: message.trim(), ...(color ? { color } : {}) });
+    wsSend({
+      cmd: 'admin_broadcast',
+      message: message.trim(),
+      ...(color ? { color } : {}),
+      ...(selectedTargets.length > 0 ? { targets: selectedTargets } : {}),
+    });
     const updated = [entry, ...history].slice(0, 20);
     setHistory(updated);
     saveBroadcastHistory(updated);
@@ -687,6 +698,41 @@ function BroadcastPanel() {
               ))}
             </div>
           </div>
+
+          {/* Target Selection */}
+          {sessions.length > 0 && (
+            <div>
+              <label className="block text-[13px] text-ct-muted mb-1.5">Recipients</label>
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={() => setSelectedTargets([])}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                    selectedTargets.length === 0
+                      ? 'bg-ct-blue text-white border-ct-blue'
+                      : 'bg-ct-surface-solid text-ct-muted border-ct-border-solid'
+                  }`}
+                >
+                  All Users
+                </button>
+                {sessions.map((s, i) => (
+                  <button
+                    key={i}
+                    onClick={() => toggleTarget(s.username)}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                      selectedTargets.includes(s.username)
+                        ? 'bg-ct-accent/20 text-ct-accent border-ct-accent'
+                        : 'bg-ct-surface-solid text-ct-muted border-ct-border-solid'
+                    }`}
+                  >
+                    {s.username}
+                  </button>
+                ))}
+              </div>
+              {selectedTargets.length > 0 && (
+                <div className="text-[11px] text-ct-muted-dark mt-1">Sending to: {selectedTargets.join(', ')}</div>
+              )}
+            </div>
+          )}
 
           <button onClick={sendBroadcast} disabled={!message.trim()} className="btn btn-primary">Send Broadcast</button>
         </div>
