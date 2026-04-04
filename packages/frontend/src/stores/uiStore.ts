@@ -32,8 +32,8 @@ export const useUiStore = create<UiState>((set) => ({
   wsConnected: false,
   toasts: [],
   eventLog: [],
-  adminSubPage: 'stats',
-  eventLogExpanded: false,
+  adminSubPage: localStorage.getItem('ct2_admin_page') ?? 'stats',
+  eventLogExpanded: localStorage.getItem('ct2_log_expanded') === 'true',
 
   setActiveTab: (tab) => {
     localStorage.setItem('ct2_active_tab', tab);
@@ -60,6 +60,6 @@ export const useUiStore = create<UiState>((set) => ({
 
   clearEventLog: () => set({ eventLog: [] }),
 
-  setAdminSubPage: (page) => set({ adminSubPage: page }),
-  toggleEventLog: () => set(s => ({ eventLogExpanded: !s.eventLogExpanded })),
+  setAdminSubPage: (page) => { localStorage.setItem('ct2_admin_page', page); set({ adminSubPage: page }); },
+  toggleEventLog: () => set(s => { const next = !s.eventLogExpanded; localStorage.setItem('ct2_log_expanded', String(next)); return { eventLogExpanded: next }; }),
 }));
