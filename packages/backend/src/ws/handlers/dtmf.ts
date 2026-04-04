@@ -51,9 +51,9 @@ function shouldReceiveDtmf(monitor: MonitorState, dtmfChannel: string, dtmfBridg
     return dtmfBridge === monitor.monitoredBridge;
   }
 
-  // If monitoring a specific channel, check same bridge
+  // If monitoring a specific channel but no bridge was resolved, match channel directly
   if (monitor.monitoredChannel) {
-    return true; // Bridge check handled above
+    return dtmfChannel === monitor.monitoredChannel || (dtmfBridge && dtmfBridge === monitor.monitoredBridge);
   }
 
   // Admin monitoring all — match any bridge that has their user's channels
@@ -118,7 +118,7 @@ function ensureAmiListener() {
 
   ami.on('ami_event', (evt: AmiEvent) => {
     if (evt.event === 'DTMFEnd') {
-      dispatchDtmf(evt);
+      dispatchDtmf(evt).catch(err => console.error('[DTMF] dispatch error:', err));
     }
 
     // Clean up monitors when monitored channel hangs up

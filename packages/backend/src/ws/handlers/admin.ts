@@ -390,7 +390,7 @@ export async function handleGetAuditLog(
       return true;
     }).slice(0, 100);
 
-    send(ws, { type: 'audit_log' as any, lines: filtered } as any);
+    send(ws, { type: 'audit_log', lines: filtered });
   } catch (err) {
     send(ws, { type: 'error', message: 'Failed to read audit log.', code: 'FS_ERROR' });
   }
@@ -402,11 +402,11 @@ export async function handleAddCredit(
   msg: any,
   send: SendFn
 ) {
-  const targetUserId = parseInt(msg.targetUserId);
-  const amount = parseFloat(msg.amount);
+  const targetUserId = msg.targetUserId;
+  const amount = msg.amount;
   const note = (msg.note || '').trim();
 
-  if (!targetUserId || isNaN(amount) || !note) {
+  if (targetUserId == null || isNaN(amount) || !note) {
     send(ws, { type: 'error', message: 'Missing target user, amount, or note.', code: 'INVALID_INPUT' });
     return;
   }

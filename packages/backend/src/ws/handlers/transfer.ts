@@ -83,11 +83,11 @@ export async function handleTransferCall(
 
     auditLog(session.username, session.role, session.ip, 'transfer_call', channel, `${transferType}:${destination}`);
     send(ws, {
-      type: 'transfer_initiated' as any,
+      type: 'transfer_initiated',
       channel,
       destination,
       transferType,
-    } as any);
+    });
   } catch (err) {
     send(ws, { type: 'error', message: `Transfer failed: ${err}`, code: 'AMI_ERROR' });
   }

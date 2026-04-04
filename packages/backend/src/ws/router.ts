@@ -324,12 +324,12 @@ async function handleSwitchSipUser(ws: ServerWebSocket<any>, session: SessionInf
   }
 
   send(ws, {
-    type: 'sip_user_switched' as any,
+    type: 'sip_user_switched',
     sipUser: sipUser || '',
     permissions: perms,
     callerid,
     tollfreeBlocked,
-  } as any);
+  });
 }
 
 async function handleStartTranscript(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {

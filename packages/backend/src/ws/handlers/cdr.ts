@@ -10,7 +10,7 @@ export async function handleGetCdr(
   send: SendFn
 ) {
   const page = Math.max(1, msg.page ?? 1);
-  const perPage = Math.min(50, Math.max(10, msg.perPage ?? 25));
+  const perPage = Math.min(50, Math.max(1, msg.perPage ?? 25));
   const search = (msg.search ?? '').trim();
   const dateFrom = (msg.dateFrom ?? '').trim();
   const dateTo = (msg.dateTo ?? '').trim();

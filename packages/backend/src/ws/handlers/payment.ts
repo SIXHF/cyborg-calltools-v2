@@ -89,11 +89,11 @@ export async function handleCreatePayment(
     if (result?.result?.url) {
       auditLog(session.username, session.role, session.ip, 'create_payment', orderId, formattedAmount);
       send(ws, {
-        type: 'payment_created' as any,
+        type: 'payment_created',
         payment_url: result.result.url,
         order_id: orderId,
         amount: formattedAmount,
-      } as any);
+      });
     } else {
       const errorMsg = result?.message || 'Unknown error';
       console.error('[Payment] Heleket error:', JSON.stringify(result));

@@ -210,9 +210,9 @@ export async function enrichChannels(
 
   try {
     send(ws, {
-      type: 'cnam_update' as any,
+      type: 'cnam_update',
       cnam_map: cnamMap,
-    } as any);
+    });
   } catch {
     // Client disconnected
   }
