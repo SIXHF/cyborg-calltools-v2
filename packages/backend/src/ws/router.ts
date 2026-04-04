@@ -33,6 +33,11 @@ import {
   handleGetAuditLog,
   handleAddCredit,
   handleSetGlobalSettings,
+  handleGetIpRestrictions,
+  handleSetIpRestrictions,
+  handleGetRateLimits,
+  handleClearRateLimitAdmin,
+  handleSetRateLimitWhitelist,
 } from './handlers/admin';
 
 type SendFn = (ws: ServerWebSocket<any>, msg: ServerMessage) => void;
@@ -305,12 +310,29 @@ export async function routeMessage(
       await handleSetGlobalSettings(ws, session, msg as any, send, broadcastFn ?? undefined);
       break;
 
+    case 'admin_get_ip_restrictions':
+      if (session.role !== 'admin') { send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' }); return; }
+      await handleGetIpRestrictions(ws, session, msg as any, send);
+      break;
+
+    case 'admin_set_ip_restrictions':
+      if (session.role !== 'admin') { send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' }); return; }
+      await handleSetIpRestrictions(ws, session, msg as any, send);
+      break;
+
+    case 'admin_get_rate_limits':
+      if (session.role !== 'admin') { send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' }); return; }
+      await handleGetRateLimits(ws, session, msg as any, send);
+      break;
+
     case 'admin_clear_rate_limit':
-      if (session.role !== 'admin') {
-        send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' });
-        return;
-      }
-      send(ws, { type: 'error', message: 'Rate limit clearing not yet implemented.', code: 'NOT_IMPLEMENTED' });
+      if (session.role !== 'admin') { send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' }); return; }
+      await handleClearRateLimitAdmin(ws, session, msg as any, send);
+      break;
+
+    case 'admin_set_rate_limit_whitelist':
+      if (session.role !== 'admin') { send(ws, { type: 'error', message: 'Admin access required.', code: 'FORBIDDEN' }); return; }
+      await handleSetRateLimitWhitelist(ws, session, msg as any, send);
       break;
 
     case 'admin_approve_audio':

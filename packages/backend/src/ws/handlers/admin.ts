@@ -573,3 +573,175 @@ export async function handleAddCredit(
     send(ws, { type: 'error', message: 'Failed to add credit.', code: 'DB_ERROR' });
   }
 }
+
+// ── IP Restrictions ──
+
+export async function handleGetIpRestrictions(
+  ws: ServerWebSocket<any>,
+  session: any,
+  msg: any,
+  send: SendFn
+) {
+  try {
+    const raw = await readFile(PERMISSIONS_FILE, 'utf-8');
+    const config = JSON.parse(raw);
+    send(ws, { type: 'ip_restrictions_list' as any, restrictions: config.ip_restrictions || { users: {}, sip_users: {} } } as any);
+  } catch {
+    send(ws, { type: 'ip_restrictions_list' as any, restrictions: { users: {}, sip_users: {} } } as any);
+  }
+}
+
+export async function handleSetIpRestrictions(
+  ws: ServerWebSocket<any>,
+  session: any,
+  msg: any,
+  send: SendFn
+) {
+  const { targetType, targetName, ips } = msg;
+  if (!targetType || !targetName) {
+    send(ws, { type: 'error', message: 'Missing target.', code: 'INVALID_INPUT' });
+    return;
+  }
+
+  try {
+    let config: any = {};
+    try { config = JSON.parse(await readFile(PERMISSIONS_FILE, 'utf-8')); } catch {}
+
+    if (!config.ip_restrictions) config.ip_restrictions = { users: {}, sip_users: {} };
+
+    if (ips && ips.length > 0) {
+      if (!config.ip_restrictions[targetType]) config.ip_restrictions[targetType] = {};
+      config.ip_restrictions[targetType][targetName] = ips;
+    } else {
+      // Empty = remove restrictions
+      if (config.ip_restrictions[targetType]) {
+        delete config.ip_restrictions[targetType][targetName];
+      }
+    }
+
+    // Cascade: if users, copy to SIP users (V1 line 4630)
+    if (targetType === 'users') {
+      const sipRows = await dbQuery<any>(
+        'SELECT s.name FROM pkg_sip s JOIN pkg_user u ON s.id_user = u.id WHERE u.username = ?',
+        [targetName]
+      );
+      if (!config.ip_restrictions.sip_users) config.ip_restrictions.sip_users = {};
+      for (const sr of sipRows) {
+        if (ips && ips.length > 0) {
+          config.ip_restrictions.sip_users[sr.name] = [...ips];
+        } else {
+          delete config.ip_restrictions.sip_users[sr.name];
+        }
+      }
+    }
+
+    await writeFile(PERMISSIONS_FILE, JSON.stringify(config, null, 2));
+    invalidatePermissionCache();
+    auditLog(session.username, session.role, session.ip, 'set_ip_restrictions', targetName, JSON.stringify(ips));
+    send(ws, { type: 'ip_restrictions_updated' as any, targetType, targetName, ips: ips || [] } as any);
+  } catch (err) {
+    send(ws, { type: 'error', message: 'Failed to save IP restrictions.', code: 'FS_ERROR' });
+  }
+}
+
+// ── Rate Limits ──
+
+export async function handleGetRateLimits(
+  ws: ServerWebSocket<any>,
+  session: any,
+  msg: any,
+  send: SendFn
+) {
+  // Import rate limit buckets from middleware
+  const { getRateLimitBuckets } = await import('../middleware');
+  const buckets = getRateLimitBuckets();
+  const now = Date.now();
+  const LOGIN_WINDOW = 60_000;
+
+  const rateLimits: any[] = [];
+  for (const [key, timestamps] of buckets.entries()) {
+    // Only show login rate limits (key format: "ip:username")
+    if (key.startsWith('cmd:') || key.startsWith('call:')) continue;
+    const active = timestamps.filter((t: number) => now - t < LOGIN_WINDOW);
+    if (active.length === 0) continue;
+    const parts = key.split(':');
+    rateLimits.push({
+      rateKey: key,
+      ip: parts[0] || 'unknown',
+      username: parts.slice(1).join(':') || 'unknown',
+      attempts: active.length,
+      lastAttempt: Math.max(...active),
+      expiresAt: Math.max(...active) + LOGIN_WINDOW,
+    });
+  }
+
+  const perms = JSON.parse(await readFile(PERMISSIONS_FILE, 'utf-8').catch(() => '{}'));
+
+  send(ws, {
+    type: 'rate_limits_list' as any,
+    rateLimits,
+    whitelist: perms.rate_limit_whitelist || [],
+    maxAttempts: 5,
+    windowSeconds: 60,
+  } as any);
+}
+
+export async function handleClearRateLimitAdmin(
+  ws: ServerWebSocket<any>,
+  session: any,
+  msg: any,
+  send: SendFn
+) {
+  const { getRateLimitBuckets } = await import('../middleware');
+  const buckets = getRateLimitBuckets();
+  const { rateKey, clearAll } = msg;
+
+  if (clearAll) {
+    buckets.clear();
+  } else if (rateKey) {
+    buckets.delete(rateKey);
+  }
+
+  auditLog(session.username, session.role, session.ip, 'clear_rate_limit', rateKey || 'all');
+  send(ws, { type: 'rate_limit_cleared' as any, rateKey: rateKey || '', clearAll: !!clearAll } as any);
+}
+
+export async function handleSetRateLimitWhitelist(
+  ws: ServerWebSocket<any>,
+  session: any,
+  msg: any,
+  send: SendFn
+) {
+  const { action, ip: ipStr } = msg;
+  if (!action || !ipStr) {
+    send(ws, { type: 'error', message: 'Missing action or IP.', code: 'INVALID_INPUT' });
+    return;
+  }
+
+  try {
+    let config: any = {};
+    try { config = JSON.parse(await readFile(PERMISSIONS_FILE, 'utf-8')); } catch {}
+
+    let whitelist: string[] = config.rate_limit_whitelist || [];
+
+    if (action === 'add') {
+      if (!whitelist.includes(ipStr)) whitelist.push(ipStr);
+      // Also clear rate limits for this IP
+      const { getRateLimitBuckets } = await import('../middleware');
+      const buckets = getRateLimitBuckets();
+      for (const key of buckets.keys()) {
+        if (key.startsWith(ipStr + ':')) buckets.delete(key);
+      }
+    } else if (action === 'remove') {
+      whitelist = whitelist.filter(ip => ip !== ipStr);
+    }
+
+    config.rate_limit_whitelist = whitelist;
+    await writeFile(PERMISSIONS_FILE, JSON.stringify(config, null, 2));
+    invalidatePermissionCache();
+    auditLog(session.username, session.role, session.ip, 'set_rate_whitelist', ipStr, action);
+    send(ws, { type: 'rate_whitelist_updated' as any, whitelist } as any);
+  } catch (err) {
+    send(ws, { type: 'error', message: 'Failed to update whitelist.', code: 'FS_ERROR' });
+  }
+}

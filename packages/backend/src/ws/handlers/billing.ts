@@ -70,35 +70,43 @@ export async function handleGetRefillHistory(
   const offset = (page - 1) * perPage;
 
   try {
-    let userId: number | null = null;
-
-    // If admin/user has a selected SIP user, show that user's refill history
+    // V1 line 5831-5836: admin with no filter sees ALL refills
     const targetSip = msg.targetSip || session.selectedSipUser;
-    if (targetSip && (session.role === 'admin' || session.role === 'user')) {
-      userId = await resolveUserId(targetSip);
-    }
 
-    // Fall back to session's own userId
-    if (!userId) {
-      userId = session.userId ?? null;
-    }
-    if (!userId && session.sipUser) {
-      userId = await resolveUserId(session.sipUser);
-    }
+    let whereClause = '';
+    let whereParams: any[] = [];
 
-    if (!userId) {
-      send(ws, { type: 'error', message: 'Could not resolve user account.', code: 'NOT_FOUND' });
-      return;
+    if (session.role === 'admin' && !targetSip) {
+      // Admin with "All" selected — show ALL refills (V1: where = "1=1")
+      whereClause = '1=1';
+    } else {
+      // Resolve specific user
+      let userId: number | null = null;
+      if (targetSip) {
+        userId = await resolveUserId(targetSip);
+      }
+      if (!userId) {
+        userId = session.userId ?? null;
+      }
+      if (!userId && session.sipUser) {
+        userId = await resolveUserId(session.sipUser);
+      }
+      if (!userId) {
+        send(ws, { type: 'error', message: 'Could not resolve user account.', code: 'NOT_FOUND' });
+        return;
+      }
+      whereClause = 'id_user = ?';
+      whereParams = [userId];
     }
 
     const rows = await dbQuery<any>(
-      'SELECT id, date, credit, description, payment FROM pkg_refill WHERE id_user = ? ORDER BY id DESC LIMIT ? OFFSET ?',
-      [userId, perPage, offset]
+      `SELECT id, date, credit, description, payment FROM pkg_refill WHERE ${whereClause} ORDER BY id DESC LIMIT ? OFFSET ?`,
+      [...whereParams, perPage, offset]
     );
 
     const countRows = await dbQuery<{ cnt: number }>(
-      'SELECT COUNT(*) as cnt FROM pkg_refill WHERE id_user = ?',
-      [userId]
+      `SELECT COUNT(*) as cnt FROM pkg_refill WHERE ${whereClause}`,
+      whereParams
     );
 
     send(ws, {
