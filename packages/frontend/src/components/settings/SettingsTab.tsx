@@ -1,8 +1,121 @@
+import { useState, useEffect } from 'react';
+import { useAuthStore } from '../../stores/authStore';
+import { wsSend } from '../../hooks/useWebSocket';
+import { useWsMessage } from '../../hooks/useWsMessage';
+
 export function SettingsTab() {
+  const { sipUsers, role, permissions } = useAuthStore();
+  const [callerid, setCallerid] = useState('');
+  const [selectedSip, setSelectedSip] = useState(sipUsers[0] ?? '');
+  const [saving, setSaving] = useState(false);
+
+  const calleridUpdate = useWsMessage<any>('callerid_updated');
+
+  useEffect(() => {
+    if (calleridUpdate) setSaving(false);
+  }, [calleridUpdate]);
+
+  const handleSetCallerid = () => {
+    if (!selectedSip) return;
+    setSaving(true);
+    wsSend({ cmd: 'set_callerid', sipUser: selectedSip, callerid: callerid.trim() });
+  };
+
+  const canEditCallerid = role === 'admin' || permissions.caller_id !== false;
+
   return (
-    <div className="glass-panel p-6" role="tabpanel" id="panel-settings">
-      <h2 className="text-lg font-semibold mb-4">Settings</h2>
-      <p className="text-ct-muted text-sm">Caller ID management and notification preferences.</p>
+    <div className="space-y-5 animate-fade-in" role="tabpanel" id="panel-settings">
+      {/* Caller ID Management */}
+      <div className="glass-panel">
+        <div className="panel-header">
+          <h2>Caller ID</h2>
+        </div>
+        <div className="p-5 space-y-4">
+          {!canEditCallerid ? (
+            <p className="text-ct-muted text-sm">Caller ID management is disabled for your account.</p>
+          ) : (
+            <>
+              {sipUsers.length > 1 && (
+                <div>
+                  <label className="block text-[13px] text-ct-muted mb-1.5">SIP User</label>
+                  <select
+                    value={selectedSip}
+                    onChange={e => setSelectedSip(e.target.value)}
+                    className="form-input"
+                  >
+                    {sipUsers.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div>
+                <label className="block text-[13px] text-ct-muted mb-1.5">
+                  New Caller ID <span className="text-ct-muted-dark">(US/CA: 11 digits starting with 1)</span>
+                </label>
+                <div className="flex gap-3">
+                  <input
+                    type="text"
+                    value={callerid}
+                    onChange={e => setCallerid(e.target.value)}
+                    placeholder="e.g. 18478603211"
+                    className="form-input flex-1"
+                    maxLength={15}
+                  />
+                  <button
+                    onClick={handleSetCallerid}
+                    disabled={saving || !callerid.trim()}
+                    className="btn btn-primary"
+                  >
+                    {saving ? 'Saving...' : 'Set Caller ID'}
+                  </button>
+                </div>
+              </div>
+              <button
+                onClick={() => { setCallerid(''); wsSend({ cmd: 'set_callerid', sipUser: selectedSip, callerid: '' }); }}
+                className="btn btn-sm"
+              >
+                Clear Caller ID
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Notification Preferences */}
+      <div className="glass-panel">
+        <div className="panel-header">
+          <h2>Notifications</h2>
+        </div>
+        <div className="p-0">
+          {[
+            { label: 'DTMF beep sound', desc: 'Play a sound when a DTMF digit is captured', key: 'dtmf_beep' },
+            { label: 'Call connect notification', desc: 'Alert when a monitored call connects', key: 'call_connect' },
+            { label: 'Desktop notifications', desc: 'Show browser notifications for admin broadcasts', key: 'desktop_notif' },
+          ].map(item => (
+            <div key={item.key} className="flex items-center justify-between px-5 py-3 border-b border-ct-border-solid/50 last:border-b-0">
+              <div>
+                <div className="text-[13px] text-ct-text-secondary">{item.label}</div>
+                <div className="text-[11px] text-ct-muted-dark">{item.desc}</div>
+              </div>
+              <label className="relative inline-block w-9 h-5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  defaultChecked
+                  className="sr-only peer"
+                  onChange={() => {
+                    if (item.key === 'desktop_notif' && 'Notification' in window) {
+                      Notification.requestPermission();
+                    }
+                  }}
+                />
+                <span className="absolute inset-0 rounded-full bg-ct-border-solid transition-colors peer-checked:bg-ct-green-dark" />
+                <span className="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-ct-text-secondary transition-transform peer-checked:translate-x-4" />
+              </label>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

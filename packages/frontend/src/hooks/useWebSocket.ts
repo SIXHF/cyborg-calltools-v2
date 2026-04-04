@@ -93,12 +93,43 @@ function handleMessage(event: MessageEvent) {
       ui.addLogEntry(`Transcript ended for ${msg.channel}`);
       break;
 
+    case 'callerid_updated':
+      ui.addToast(`Caller ID updated: ${(msg as any).callerid || 'cleared'}`, 'success');
+      ui.addLogEntry(`Caller ID for ${(msg as any).sipUser} set to ${(msg as any).callerid || '(cleared)'}`);
+      break;
+
+    case 'call_originated':
+      ui.addToast(`Call originated to ${(msg as any).destination}`, 'success');
+      ui.addLogEntry(`Call originated: ${(msg as any).sipUser} → ${(msg as any).destination}`);
+      break;
+
+    case 'cnam_result':
+      ui.addLogEntry(`CNAM: ${(msg as any).number} → ${(msg as any).name}${(msg as any).carrier ? ` (${(msg as any).carrier})` : ''}`);
+      break;
+
+    case 'cdr_result':
+    case 'stats_result':
+    case 'billing_update':
+    case 'refill_history':
+    case 'users_overview':
+    case 'online_users':
+    case 'permissions_data':
+      // These are handled by individual components via store subscriptions
+      // Dispatch to a generic event handler
+      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
+      break;
+
     case 'permissions_updated':
       auth.updatePermissions(msg.permissions);
       break;
 
     case 'admin_broadcast':
       ui.addToast(`[${msg.from}] ${msg.message}`, 'info', 10000);
+      ui.addLogEntry(`Broadcast from ${msg.from}: ${msg.message}`);
+      // Desktop notification
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification(`CallTools: ${msg.from}`, { body: msg.message });
+      }
       break;
 
     case 'error':

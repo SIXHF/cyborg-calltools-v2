@@ -68,8 +68,34 @@ export const CnamLookupMessage = z.object({
 
 export const GetCdrMessage = z.object({
   cmd: z.literal('get_cdr'),
-  limit: z.number().int().min(1).max(100).default(50),
-  offset: z.number().int().min(0).default(0),
+  page: z.number().int().min(1).default(1),
+  perPage: z.number().int().min(1).max(50).default(25),
+  search: z.string().optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
+  targetSip: z.string().optional(),
+});
+
+export const GetBalanceMessage = z.object({
+  cmd: z.literal('get_balance'),
+});
+
+export const GetRefillHistoryMessage = z.object({
+  cmd: z.literal('get_refill_history'),
+  page: z.number().int().min(1).default(1),
+  perPage: z.number().int().min(1).max(50).default(25),
+});
+
+export const GetUsersOverviewMessage = z.object({
+  cmd: z.literal('get_users_overview'),
+});
+
+export const GetPermissionsMessage = z.object({
+  cmd: z.literal('get_permissions'),
+});
+
+export const GetSessionsMessage = z.object({
+  cmd: z.literal('get_sessions'),
 });
 
 export const GetChannelsMessage = z.object({
@@ -125,6 +151,11 @@ export const ClientMessage = z.discriminatedUnion('cmd', [
   CnamLookupMessage,
   GetChannelsMessage,
   GetCdrMessage,
+  GetBalanceMessage,
+  GetRefillHistoryMessage,
+  GetUsersOverviewMessage,
+  GetPermissionsMessage,
+  GetSessionsMessage,
   GetStatsMessage,
   AdminSetPermissionsMessage,
   AdminForceLogoutMessage,
@@ -152,14 +183,17 @@ export type ServerMessage =
   | { type: 'audio_stream'; channel: string; data: string }
   | { type: 'cnam_result'; number: string; name: string; carrier?: string; lineType?: string }
   | { type: 'fraud_result'; number: string; score: number; riskLevel: string; flags: string[] }
-  | { type: 'cdr_result'; records: Record<string, unknown>[]; total: number }
+  | { type: 'cdr_result'; records: Record<string, unknown>[]; total: number; page?: number; perPage?: number }
   | { type: 'stats_result'; data: Record<string, unknown> }
   | { type: 'callerid_updated'; sipUser: string; callerid: string }
   | { type: 'callerid_blocked'; sipUser: string; reason: string }
   | { type: 'call_originated'; sipUser: string; destination: string }
-  | { type: 'online_users'; users: { username: string; role: string; sipUser?: string }[] }
+  | { type: 'online_users'; users: { username: string; role: string; sipUser?: string; ip?: string; connectedAt?: number }[] }
   | { type: 'admin_broadcast'; message: string; from: string }
   | { type: 'permissions_updated'; permissions: Record<string, boolean> }
+  | { type: 'permissions_data'; config: Record<string, unknown> }
   | { type: 'billing_update'; balance: number; currency: string }
+  | { type: 'refill_history'; records: Record<string, unknown>[]; total: number; page: number; perPage: number }
+  | { type: 'users_overview'; users: Record<string, unknown>[] }
   | { type: 'error'; message: string; code?: string }
   | { type: 'pong' };

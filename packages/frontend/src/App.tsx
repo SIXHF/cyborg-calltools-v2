@@ -4,6 +4,7 @@ import { Header } from './components/layout/Header';
 import { TabNav } from './components/layout/TabNav';
 import { LoginForm } from './components/layout/LoginForm';
 import { Toast } from './components/shared/Toast';
+import { EventLogDrawer } from './components/shared/EventLogDrawer';
 import { MonitorTab } from './components/monitor/MonitorTab';
 import { ToolsTab } from './components/tools/ToolsTab';
 import { HistoryTab } from './components/history/HistoryTab';
@@ -40,6 +41,7 @@ export function App() {
         {activeTab === 'billing' && <BillingTab />}
         {activeTab === 'admin' && <AdminTab />}
       </main>
+      <EventLogDrawer />
       <Toast />
     </div>
   );
