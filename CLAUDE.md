@@ -272,3 +272,20 @@ The WebSocket hook uses `Zustand.getState()` instead of React hooks to avoid rec
 - **Repo**: `SIXHF/cyborg-calltools-v2`
 - **Dev branch**: `claude/calltools-v2-continuation-cX6nc`
 - **Legacy repo**: `SIXHF/cyborg-calltools` (not modified by V2)
+
+## Development Workflow
+
+### Multi-Agent Strategy
+Always use multiple agents in parallel to divide workload:
+- Launch 2-4 agents simultaneously for code reviews, audits, and research
+- One agent per concern: frontend bugs, backend bugs, schema mismatches, V1 comparison
+- Wait for ALL agents to complete before implementing fixes
+- Fix everything in one batch, build once, deploy once
+- Never do piecemeal patches — collect all issues first, then fix all at once
+
+### Code Review Protocol
+Before any deploy, run parallel review agents checking:
+1. Frontend components: useEffect deps, stale closures, event dispatch
+2. Backend handlers: SQL injection, permission checks, async/await issues
+3. Message schema: Zod union completeness, router coverage, type mismatches
+4. V1 parity: feature-by-feature comparison against legacy code
