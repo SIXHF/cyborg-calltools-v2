@@ -391,6 +391,19 @@ async function handleGetChannels(ws: ServerWebSocket<any>, session: SessionInfo,
 
 async function handleSwitchSipUser(ws: ServerWebSocket<any>, session: SessionInfo, msg: any, send: SendFn) {
   const sipUser = (msg.sipUser || '').trim();
+  const accountName = (msg.account || '').trim();
+
+  // When account is selected, look up all SIP users for that account
+  let accountSipUsers: string[] = [];
+  if (accountName) {
+    try {
+      const rows = await dbQuery<{ name: string }>(
+        'SELECT s.name FROM pkg_sip s JOIN pkg_user u ON s.id_user = u.id WHERE u.username = ?',
+        [accountName]
+      );
+      accountSipUsers = rows.map(r => r.name);
+    } catch {}
+  }
 
   // Ownership validation: non-admin can only switch to their own SIP users
   if (sipUser && session.role !== 'admin') {
@@ -403,6 +416,8 @@ async function handleSwitchSipUser(ws: ServerWebSocket<any>, session: SessionInf
 
   // Update session context
   (session as any).selectedSipUser = sipUser || undefined;
+  (session as any).selectedAccount = accountName || undefined;
+  (session as any).selectedAccountSipUsers = accountSipUsers.length > 0 ? accountSipUsers : undefined;
 
   // Resolve permissions for the selected SIP user
   const perms = sipUser
@@ -423,7 +438,7 @@ async function handleSwitchSipUser(ws: ServerWebSocket<any>, session: SessionInf
 
   send(ws, {
     type: 'sip_user_switched',
-    sipUser: sipUser || '',
+    sipUser: sipUser || accountName || '',
     permissions: perms,
     callerid,
     tollfreeBlocked,

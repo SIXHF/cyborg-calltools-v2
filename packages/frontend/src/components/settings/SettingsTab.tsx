@@ -10,10 +10,33 @@ const TOLL_FREE_PREFIXES = ['1800', '1833', '1844', '1855', '1866', '1877', '188
 export function SettingsTab() {
   const { sipUsers, role, permissions } = useAuthStore();
   const globalSelectedSip = useAuthStore(s => s.selectedSipUser);
+  const sipGroups = useAuthStore(s => s.sipGroups);
   const [callerid, setCallerid] = useState('');
-  const [selectedSip, setSelectedSip] = useState(globalSelectedSip || sipUsers[0] || '');
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState('');
+
+  // Resolve the effective SIP user — account prefix means pick the first SIP under that account
+  const resolveEffectiveSip = (global: string | undefined): string => {
+    if (!global) return sipUsers[0] || '';
+    if (global.startsWith('account:')) {
+      const accountName = global.slice('account:'.length);
+      const group = sipGroups?.find(g => g.account === accountName);
+      return group?.sipUsers?.[0] || sipUsers[0] || '';
+    }
+    return global;
+  };
+
+  const [selectedSip, setSelectedSip] = useState(() => resolveEffectiveSip(globalSelectedSip));
+
+  // Get SIP users for current account selection (for dropdown)
+  const accountSipUsers = useMemo(() => {
+    if (globalSelectedSip?.startsWith('account:')) {
+      const accountName = globalSelectedSip.slice('account:'.length);
+      const group = sipGroups?.find(g => g.account === accountName);
+      return group?.sipUsers || [];
+    }
+    return [];
+  }, [globalSelectedSip, sipGroups]);
 
   const calleridUpdate = useWsMessage<any>('callerid_updated');
   const calleridInfo = useWsMessage<any>('callerid_info');
@@ -26,9 +49,9 @@ export function SettingsTab() {
     }
   }, [calleridUpdate]);
 
-  // Sync with global SIP selector
+  // Sync with global SIP selector — resolve account prefix to actual SIP
   useEffect(() => {
-    if (globalSelectedSip) setSelectedSip(globalSelectedSip);
+    setSelectedSip(resolveEffectiveSip(globalSelectedSip));
   }, [globalSelectedSip]);
 
   // Fetch current caller ID on mount and when SIP user changes (Bug 3.1 fix)
@@ -73,9 +96,8 @@ export function SettingsTab() {
             <p className="text-ct-muted text-sm">Caller ID management is disabled for your account.</p>
           ) : (
             <>
-              {/* Only show SIP selector for 'user' role with multiple SIPs.
-                  Admin uses the global header SIP selector. sip_user has only one. */}
-              {role === 'user' && sipUsers.length > 1 && (
+              {/* Show SIP dropdown when account selected or user has multiple SIPs */}
+              {(accountSipUsers.length > 1 || (role === 'user' && sipUsers.length > 1)) && (
                 <div>
                   <label className="block text-[13px] text-ct-muted mb-1.5">SIP User</label>
                   <select
@@ -83,13 +105,13 @@ export function SettingsTab() {
                     onChange={e => setSelectedSip(e.target.value)}
                     className="form-input"
                   >
-                    {sipUsers.map(s => (
+                    {(accountSipUsers.length > 0 ? accountSipUsers : sipUsers).map(s => (
                       <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
                 </div>
               )}
-              {(role === 'admin' || role === 'sip_user') && selectedSip && (
+              {selectedSip && (
                 <div className="text-[13px] text-ct-muted">Managing: <span className="text-ct-accent font-mono font-semibold">{selectedSip}</span></div>
               )}
               <div>

@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { wsSend } from '../../hooks/useWebSocket';
 import { useAuthStore } from '../../stores/authStore';
+import { useWsMessage } from '../../hooks/useWsMessage';
 import type { SipUsageEntry, SipUsageTotals, TopDestination } from '@calltools/shared';
 
 type SortCol = 'sip_user' | 'total_calls' | 'answered' | 'failed' | 'total_seconds' | 'cost' | 'success_rate';
@@ -14,6 +15,7 @@ function SipUsagePanel() {
   const [shiftLabel, setShiftLabel] = useState('Current Shift');
   const [sortCol, setSortCol] = useState<SortCol>('total_calls');
   const [sortDir, setSortDir] = useState<SortDir>(-1);
+  const selectedSip = useAuthStore(s => s.selectedSipUser);
 
   const handleUsageData = useCallback((e: Event) => {
     const msg = (e as CustomEvent).detail;
@@ -37,14 +39,26 @@ function SipUsagePanel() {
     }
   }, []);
 
+  // Build SIP usage request with selected SIP/account filter
+  const fetchUsage = useCallback(() => {
+    const params: any = { cmd: 'get_sip_usage' };
+    if (selectedSip) {
+      if (selectedSip.startsWith('account:')) {
+        params.target_account = selectedSip.slice('account:'.length);
+      } else {
+        params.target_sip = selectedSip;
+      }
+    }
+    wsSend(params);
+  }, [selectedSip]);
+
   useEffect(() => {
     window.addEventListener('sip_usage_data', handleUsageData);
-    // Load on mount
-    wsSend({ cmd: 'get_sip_usage' });
+    fetchUsage();
     return () => {
       window.removeEventListener('sip_usage_data', handleUsageData);
     };
-  }, [handleUsageData]);
+  }, [handleUsageData, fetchUsage]);
 
   function handleSort(col: SortCol) {
     if (sortCol === col) {
@@ -101,7 +115,7 @@ function SipUsagePanel() {
         <div className="flex gap-2 items-center">
           <span style={{ fontSize: '11px', color: '#8b949e' }}>{shiftLabel}</span>
           <button
-            onClick={() => wsSend({ cmd: 'get_sip_usage' })}
+            onClick={fetchUsage}
             className="px-3 py-1 text-xs font-medium rounded-lg border"
             style={{ background: 'transparent', borderColor: '#30363d', color: '#c9d1d9', cursor: 'pointer' }}
           >
