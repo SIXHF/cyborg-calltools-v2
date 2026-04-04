@@ -394,30 +394,35 @@ function SessionsPanel() {
 
 function PermissionsPanel() {
   const [config, setConfig] = useState<any>(null);
+  const [targetType, setTargetType] = useState<'sip_user' | 'user'>('sip_user');
   const [selectedTarget, setSelectedTarget] = useState('');
   const [targetPerms, setTargetPerms] = useState<Record<string, boolean>>({});
   const [sipList, setSipList] = useState<string[]>([]);
+  const [accountList, setAccountList] = useState<string[]>([]);
   const permMsg = useWsMessage<any>('permissions_data');
 
   useEffect(() => { wsSend({ cmd: 'get_permissions' }); }, []);
   useEffect(() => {
     if (permMsg?.config) {
       setConfig(permMsg.config);
-      // Use the full SIP user list from backend (not just admin_restrictions keys)
       const allSips = permMsg.config._allSipUsers || Object.keys(permMsg.config.admin_restrictions || {});
       const allAccounts = permMsg.config._allUserAccounts || [];
-      setSipList([...allAccounts.map((a: string) => `account:${a}`), ...allSips]);
+      setSipList(allSips);
+      setAccountList(allAccounts);
       // Refresh current target if set
-      if (selectedTarget && permMsg.config.admin_restrictions?.[selectedTarget]) {
-        setTargetPerms({ ...permMsg.config.defaults, ...permMsg.config.admin_restrictions[selectedTarget] });
+      const cleanTarget = selectedTarget.startsWith('account:') ? selectedTarget.slice(8) : selectedTarget;
+      if (cleanTarget && permMsg.config.admin_restrictions?.[cleanTarget]) {
+        setTargetPerms({ ...permMsg.config.defaults, ...permMsg.config.admin_restrictions[cleanTarget] });
       }
     }
   }, [permMsg, selectedTarget]);
 
-  const loadPerms = (target: string) => {
-    setSelectedTarget(target);
-    if (config?.admin_restrictions?.[target]) {
-      setTargetPerms({ ...config.defaults, ...config.admin_restrictions[target] });
+  // V1: auto-load permissions when dropdown changes
+  const handleTargetChange = (value: string) => {
+    setSelectedTarget(value);
+    const cleanTarget = value.startsWith('account:') ? value.slice(8) : value;
+    if (config?.admin_restrictions?.[cleanTarget]) {
+      setTargetPerms({ ...config.defaults, ...config.admin_restrictions[cleanTarget] });
     } else {
       setTargetPerms(config?.defaults || {});
     }
@@ -427,7 +432,9 @@ function PermissionsPanel() {
 
   const save = () => {
     if (!selectedTarget) return;
-    wsSend({ cmd: 'admin_set_permissions', target: selectedTarget, permissions: targetPerms });
+    // For user accounts, prefix with account: for cascade
+    const target = targetType === 'user' ? `account:${selectedTarget}` : selectedTarget;
+    wsSend({ cmd: 'admin_set_permissions', target, permissions: targetPerms });
   };
 
   const tools = [
@@ -439,16 +446,34 @@ function PermissionsPanel() {
     { key: 'cnam_lookup', label: 'CNAM Lookup' }, { key: 'call_cost', label: 'Call Cost Display' },
   ];
 
+  // V1 line 1740-1744: two <select> dropdowns
+  const currentList = targetType === 'sip_user' ? sipList : accountList;
+
   return (
     <div className="glass-panel">
       <div className="panel-header"><h2>Permissions Manager</h2></div>
-      <div className="p-4 border-b border-ct-border-solid">
+      <div className="p-3 border-b border-ct-border-solid">
         <div className="flex gap-2 items-center flex-wrap">
-          <input type="text" list="sip-targets" value={selectedTarget} onChange={e => setSelectedTarget(e.target.value)}
-            placeholder="SIP user or account name..." className="form-input !text-sm flex-1" />
-          <datalist id="sip-targets">{sipList.map(s => <option key={s} value={s} />)}</datalist>
-          <button onClick={() => loadPerms(selectedTarget)} className="btn btn-sm">Load</button>
-          <button onClick={save} className="btn btn-sm btn-primary">Save</button>
+          {/* V1 line 1740: target type selector */}
+          <select
+            value={targetType}
+            onChange={e => { setTargetType(e.target.value as any); setSelectedTarget(''); }}
+            className="form-input !py-1 !px-2 !text-xs"
+            style={{ width: 'auto', minWidth: 100 }}
+          >
+            <option value="sip_user">SIP User</option>
+            <option value="user">User</option>
+          </select>
+          {/* V1 line 1744: target name dropdown (NOT free text) */}
+          <select
+            value={selectedTarget}
+            onChange={e => handleTargetChange(e.target.value)}
+            className="form-input !py-1 !px-2 !text-[13px] font-mono flex-1"
+          >
+            <option value="">-- Select --</option>
+            {currentList.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <button onClick={save} disabled={!selectedTarget} className="btn btn-sm btn-primary">Save</button>
         </div>
       </div>
       {selectedTarget ? (
