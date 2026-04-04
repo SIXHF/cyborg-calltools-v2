@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { useUiStore } from '../../stores/uiStore';
 
 export function EventLogDrawer() {
-  const { eventLog } = useUiStore();
-  const [expanded, setExpanded] = useState(false);
+  const { eventLog, eventLogExpanded: expanded, toggleEventLog: setExpandedToggle } = useUiStore();
+  const setExpanded = (v: boolean) => { if (v !== expanded) setExpandedToggle(); };
 
   const lastEvent = eventLog[0] ?? '';
 

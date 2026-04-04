@@ -14,6 +14,8 @@ interface UiState {
   wsConnected: boolean;
   toasts: ToastMessage[];
   eventLog: string[];
+  adminSubPage: string;
+  eventLogExpanded: boolean;
 
   setActiveTab: (tab: TabId) => void;
   setWsConnected: (connected: boolean) => void;
@@ -21,6 +23,8 @@ interface UiState {
   removeToast: (id: string) => void;
   addLogEntry: (entry: string) => void;
   clearEventLog: () => void;
+  setAdminSubPage: (page: string) => void;
+  toggleEventLog: () => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -28,6 +32,8 @@ export const useUiStore = create<UiState>((set) => ({
   wsConnected: false,
   toasts: [],
   eventLog: [],
+  adminSubPage: 'stats',
+  eventLogExpanded: false,
 
   setActiveTab: (tab) => {
     localStorage.setItem('ct2_active_tab', tab);
@@ -53,4 +59,7 @@ export const useUiStore = create<UiState>((set) => ({
     }),
 
   clearEventLog: () => set({ eventLog: [] }),
+
+  setAdminSubPage: (page) => set({ adminSubPage: page }),
+  toggleEventLog: () => set(s => ({ eventLogExpanded: !s.eventLogExpanded })),
 }));

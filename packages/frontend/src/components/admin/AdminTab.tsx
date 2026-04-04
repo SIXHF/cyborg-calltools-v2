@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '../../stores/authStore';
+import { useUiStore } from '../../stores/uiStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { useWsMessage } from '../../hooks/useWsMessage';
 import { IpRestrictionsPanel } from './IpRestrictionsPanel';
@@ -868,23 +869,12 @@ function BroadcastPanel() {
 export function AdminTab() {
   const role = useAuthStore(s => s.role);
   const isAdmin = role === 'admin';
-  // V1: 'user' role sees only Settings. Admin sees Dashboard/Settings/Broadcast.
-  const defaultPage: AdminPage = isAdmin ? 'stats' : 'settings';
-  const [page, setPage] = useState<AdminPage>(defaultPage);
-
-  const subPages: [AdminPage, string][] = isAdmin
-    ? [['stats', 'Dashboard'], ['settings', 'Settings'], ['broadcast', 'Broadcast']]
-    : [['settings', 'Settings']]; // user role only sees Settings
+  // V1: admin sub-page controlled by dropdown in TabNav, stored in uiStore
+  const page = (useUiStore(s => s.adminSubPage) || (isAdmin ? 'stats' : 'settings')) as AdminPage;
 
   return (
     <div className="space-y-4 animate-fade-in" role="tabpanel" id="panel-admin">
-      {subPages.length > 1 && (
-        <div className="flex gap-1 overflow-x-auto">
-          {subPages.map(([id, label]) => (
-            <button key={id} onClick={() => setPage(id)} className={`tab-btn-v1 ${page === id ? 'active' : ''}`}>{label}</button>
-          ))}
-        </div>
-      )}
+      {/* V1: No inline sub-tabs — sub-page selection is in the tab bar dropdown */}
 
       {page === 'stats' && <StatsDashboard />}
       {page === 'settings' && (
