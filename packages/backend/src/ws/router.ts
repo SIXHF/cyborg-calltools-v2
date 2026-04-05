@@ -508,10 +508,23 @@ async function handleGetSipInfo(ws: ServerWebSocket<any>, session: SessionInfo, 
           [userId ?? 0, sipUser ?? '']
         );
 
+    // Get balances for all users
+    const balanceRows = await dbQuery<{ id: number; credit: number }>(
+      'SELECT u.id, u.credit FROM pkg_user u'
+    );
+    const sipUserRows = await dbQuery<{ name: string; id_user: number }>(
+      'SELECT name, id_user FROM pkg_sip'
+    );
+    const sipToUser = new Map<string, number>();
+    for (const r of sipUserRows) sipToUser.set(r.name, r.id_user);
+    const userBalances = new Map<number, number>();
+    for (const r of balanceRows) userBalances.set(r.id, parseFloat(String(r.credit)) || 0);
+
     const extensions = await Promise.all(
       rows.map(async (row) => {
-        // Check registration status via Asterisk CLI
+        // Check registration status + IP via Asterisk CLI
         let registered = false;
+        let regIp = '';
         try {
           const proc = Bun.spawn(['/usr/sbin/asterisk', '-rx', `sip show peer ${row.name}`], {
             stdout: 'pipe',
@@ -519,17 +532,24 @@ async function handleGetSipInfo(ws: ServerWebSocket<any>, session: SessionInfo, 
           });
           const output = await new Response(proc.stdout).text();
           registered = output.includes('OK');
-        } catch {
-          // If asterisk command fails, assume unregistered
-        }
+          // Extract registration IP from "Addr->IP" line
+          const addrMatch = output.match(/Addr->IP\s*:\s*(\S+)/);
+          if (addrMatch) regIp = addrMatch[1].replace(/:\d+$/, ''); // strip port
+        } catch {}
+
+        const uid = sipToUser.get(row.name);
+        const balance = uid !== undefined ? userBalances.get(uid) : undefined;
 
         return {
           name: row.name,
-          callerid: row.callerid || '',
-          host: row.host || '',
-          codecs: row.allow || '',
+          callerid: row.callerid || 'Not set',
+          host: row.host || 'dynamic',
+          codecs: row.allow || 'alaw,ulaw',
           secret: session.role === 'admin' ? (row.secret || '') : '••••••',
           registered,
+          regIp: regIp || '',
+          balance: balance !== undefined ? balance : undefined,
+          sipDomain: 'sip.osetec.net',
         };
       })
     );

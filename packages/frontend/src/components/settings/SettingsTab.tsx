@@ -404,6 +404,9 @@ interface SipExtension {
   codecs: string;
   secret: string;
   registered: boolean;
+  regIp?: string;
+  balance?: number;
+  sipDomain?: string;
 }
 
 function SipAccountInfo() {
@@ -457,18 +460,36 @@ function SipAccountInfo() {
                   </span>
                 </div>
                 <div className="space-y-1 text-[12px]">
+                  {ext.balance !== undefined && (
+                    <div className="flex justify-between">
+                      <span className="text-ct-muted">Balance</span>
+                      <span className="font-mono font-semibold" style={{ color: ext.balance >= 1 ? '#3fb950' : '#f85149' }}>${ext.balance.toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-ct-muted">Caller ID</span>
-                    <span className="text-ct-text-secondary font-mono">{ext.callerid || '(none)'}</span>
+                    <span className="text-ct-text-secondary font-mono">{ext.callerid || 'Not set'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-ct-muted">Codecs</span>
-                    <span className="text-ct-text-secondary font-mono">{ext.codecs || '(default)'}</span>
+                    <span className="text-ct-text-secondary font-mono">{ext.codecs}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-ct-muted">Host</span>
-                    <span className="text-ct-text-secondary font-mono">{ext.host || 'dynamic'}</span>
+                    <span className="text-ct-text-secondary font-mono">{ext.host}</span>
                   </div>
+                  {ext.regIp && (
+                    <div className="flex justify-between">
+                      <span className="text-ct-muted">Registration IP</span>
+                      <span className="text-ct-text-secondary font-mono">{ext.regIp}</span>
+                    </div>
+                  )}
+                  {ext.sipDomain && (
+                    <div className="flex justify-between">
+                      <span className="text-ct-muted">SIP Domain</span>
+                      <span className="text-ct-text-secondary font-mono">{ext.sipDomain}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center">
                     <span className="text-ct-muted">Password</span>
                     <span className="flex items-center gap-1.5">
