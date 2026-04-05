@@ -46,6 +46,8 @@ function handleMessage(event: MessageEvent) {
       });
       ui.addLogEntry('Authenticated successfully.');
       ui.addToast('Logged in!', 'success', 2000);
+      // V1: request notification permission on login
+      try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch {}
       break;
 
     case 'auth_error':
@@ -166,6 +168,54 @@ function handleMessage(event: MessageEvent) {
 
     case 'moh_updated':
       ui.addToast((msg as any).using_default ? 'Hold music set to default' : 'Hold music updated', 'success', 3000);
+      ui.addLogEntry('Hold music ' + ((msg as any).using_default ? 'reverted to default' : 'updated'));
+      break;
+
+    case 'audio_deleted':
+      ui.addLogEntry(`Audio deleted: ${(msg as any).name}`);
+      break;
+
+    case 'cnam_result':
+      ui.addLogEntry(`CNAM: ${(msg as any).name || '?'} / ${(msg as any).carrier || '?'}`);
+      break;
+
+    case 'access_updated':
+      ui.addToast(`Access ${(msg as any).enabled ? 'enabled' : 'disabled'} for ${(msg as any).username}`, 'success', 3000);
+      ui.addLogEntry(`Access ${(msg as any).enabled ? 'enabled' : 'disabled'} for ${(msg as any).username}`);
+      break;
+
+    case 'audio_approved':
+      ui.addToast('Audio file approved', 'success', 3000);
+      ui.addLogEntry(`Audio approved: ${(msg as any).name}`);
+      break;
+
+    case 'audio_rejected':
+      ui.addLogEntry(`Audio rejected: ${(msg as any).name}`);
+      break;
+
+    case 'force_logout_ok':
+      ui.addToast(`User ${(msg as any).username || ''} disconnected`, 'success', 3000);
+      ui.addLogEntry(`Force logout: ${(msg as any).username || '?'}`);
+      break;
+
+    case 'ip_restrictions_updated':
+      ui.addToast(`IP restrictions updated for ${(msg as any).targetName}`, 'success', 3000);
+      ui.addLogEntry(`IP restrictions updated: ${(msg as any).targetType}/${(msg as any).targetName}`);
+      break;
+
+    case 'rate_limit_cleared':
+      ui.addToast((msg as any).clear_all ? 'All rate limits cleared' : 'Rate limit cleared', 'success', 3000);
+      ui.addLogEntry(`Rate limit cleared: ${(msg as any).rate_key || 'all'}`);
+      break;
+
+    case 'rate_whitelist_updated':
+      ui.addToast('Rate limit whitelist updated', 'success', 3000);
+      break;
+
+    case 'permissions_refreshed':
+      auth.updatePermissions((msg as any).permissions || {});
+      ui.addToast('Permissions refreshed', 'success', 2000);
+      ui.addLogEntry('Permissions refreshed by admin');
       break;
 
     case 'broadcast_sent':
