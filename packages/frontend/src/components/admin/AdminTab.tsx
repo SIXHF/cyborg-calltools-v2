@@ -400,23 +400,34 @@ function PermissionsPanel() {
   const [targetPerms, setTargetPerms] = useState<Record<string, boolean>>({});
   const [sipList, setSipList] = useState<string[]>([]);
   const [accountList, setAccountList] = useState<string[]>([]);
-  const permMsg = useWsMessage<any>('permissions_data');
 
-  useEffect(() => { wsSend({ cmd: 'get_permissions' }); }, []);
+  // Listen for permissions_data directly via event listener (more reliable than useWsMessage)
   useEffect(() => {
-    if (permMsg?.config) {
-      setConfig(permMsg.config);
-      const allSips = permMsg.config._allSipUsers || Object.keys(permMsg.config.admin_restrictions || {});
-      const allAccounts = permMsg.config._allUserAccounts || [];
-      setSipList(allSips);
-      setAccountList(allAccounts);
-      // Refresh current target if set
-      const cleanTarget = selectedTarget.startsWith('account:') ? selectedTarget.slice(8) : selectedTarget;
-      if (cleanTarget && permMsg.config.admin_restrictions?.[cleanTarget]) {
-        setTargetPerms({ ...permMsg.config.defaults, ...permMsg.config.admin_restrictions[cleanTarget] });
+    const handler = (e: Event) => {
+      const msg = (e as CustomEvent).detail;
+      if (msg?.type === 'permissions_data' && msg.config) {
+        setConfig(msg.config);
+        const allSips = msg.config._allSipUsers || Object.keys(msg.config.admin_restrictions || {});
+        const allAccounts = msg.config._allUserAccounts || [];
+        setSipList(allSips);
+        setAccountList(allAccounts);
       }
+    };
+    window.addEventListener('ws-message', handler);
+    wsSend({ cmd: 'get_permissions' });
+    return () => window.removeEventListener('ws-message', handler);
+  }, []);
+
+  // Update target perms when selection changes
+  useEffect(() => {
+    if (!config || !selectedTarget) return;
+    const cleanTarget = selectedTarget.startsWith('account:') ? selectedTarget.slice(8) : selectedTarget;
+    if (config.admin_restrictions?.[cleanTarget]) {
+      setTargetPerms({ ...config.defaults, ...config.admin_restrictions[cleanTarget] });
+    } else {
+      setTargetPerms(config.defaults || {});
     }
-  }, [permMsg, selectedTarget]);
+  }, [selectedTarget, config]);
 
   // V1: auto-load permissions when dropdown changes
   const handleTargetChange = (value: string) => {
