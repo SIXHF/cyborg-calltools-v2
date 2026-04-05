@@ -466,7 +466,7 @@ function PermissionsPanel() {
       <div className="panel-header"><h2>Permissions Manager</h2></div>
       <div className="p-3 border-b border-ct-border-solid">
         <div className="flex gap-2 items-center flex-wrap">
-          {/* V1 line 1740: target type selector */}
+          {/* V1 line 1740: target type selector — user role only sees SIP User */}
           <select
             value={targetType}
             onChange={e => { setTargetType(e.target.value as any); setSelectedTarget(''); }}
@@ -474,7 +474,7 @@ function PermissionsPanel() {
             style={{ width: 'auto', minWidth: 100 }}
           >
             <option value="sip_user">SIP User</option>
-            <option value="user">User</option>
+            {accountList.length > 0 && <option value="user">User</option>}
           </select>
           {/* V1 line 1744: target name dropdown (NOT free text) */}
           <select
@@ -955,7 +955,7 @@ export function AdminTab() {
           {isAdmin && <IpRestrictionsPanel />}
           {isAdmin && <RateLimitsPanel />}
           {isAdmin && <AudioApprovalPanel />}
-          <AuditLogPanel />
+          {isAdmin && <AuditLogPanel />}
         </div>
       )}
       {page === 'broadcast' && <BroadcastPanel />}

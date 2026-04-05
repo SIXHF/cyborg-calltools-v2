@@ -202,11 +202,32 @@ export async function handleGetPermissions(
   try {
     const raw = await readFile(PERMISSIONS_FILE, 'utf-8');
     const config = JSON.parse(raw);
-    // Include full SIP user list for the permissions dropdown
-    const allSips = await dbQuery<any>('SELECT name FROM pkg_sip ORDER BY name');
-    const allUsers = await dbQuery<any>('SELECT username FROM pkg_user WHERE active = 1 ORDER BY username');
-    config._allSipUsers = allSips.map((s: any) => s.name);
-    config._allUserAccounts = allUsers.map((u: any) => u.username);
+
+    if (session.role === 'admin') {
+      // Admin sees ALL SIP users and accounts
+      const allSips = await dbQuery<any>('SELECT name FROM pkg_sip ORDER BY name');
+      const allUsers = await dbQuery<any>('SELECT username FROM pkg_user WHERE active = 1 ORDER BY username');
+      config._allSipUsers = allSips.map((s: any) => s.name);
+      config._allUserAccounts = allUsers.map((u: any) => u.username);
+    } else if (session.role === 'user') {
+      // User role sees ONLY their own SIP users (V1: managedSipUsers from auth_ok)
+      config._allSipUsers = session.sipUsers ?? [];
+      config._allUserAccounts = []; // Users can't manage other users
+      // Strip sensitive data — only send defaults + their own restrictions
+      const ownRestrictions: Record<string, any> = {};
+      for (const sip of (session.sipUsers ?? [])) {
+        if (config.admin_restrictions?.[sip]) {
+          ownRestrictions[sip] = config.admin_restrictions[sip];
+        }
+      }
+      config.admin_restrictions = ownRestrictions;
+      delete config.allowed_accounts;
+      delete config.ip_restrictions;
+      delete config.rate_limit_whitelist;
+      delete config.audio_approvals;
+    }
+
+    console.log(`[Perms] Sending permissions_data (${session.role}) with ${config._allSipUsers?.length} SIP users`);
     send(ws, { type: 'permissions_data', config });
   } catch {
     send(ws, { type: 'permissions_data', config: {} });
