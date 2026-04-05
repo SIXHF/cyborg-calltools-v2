@@ -215,10 +215,10 @@ export function BillingTab() {
               <tbody>
                 {refills.map(r => (
                   <tr key={r.id}>
-                    <td className="text-ct-muted text-xs whitespace-nowrap">{new Date(r.date).toLocaleDateString()}</td>
+                    <td className="text-ct-muted text-xs whitespace-nowrap">{new Date(r.date).toLocaleString()}</td>
                     {role === 'admin' && <td className="text-ct-accent font-mono text-xs">{(r as any).username || '—'}</td>}
                     <td className="font-mono font-semibold" style={{ color: r.credit >= 0 ? '#3fb950' : '#f85149' }}>
-                      {r.credit >= 0 ? '+' : ''}{r.credit.toFixed(2)}
+                      ${r.credit >= 0 ? '+' : ''}{r.credit.toFixed(2)}
                     </td>
                     <td className="text-ct-text-secondary">{r.description || '—'}</td>
                   </tr>
@@ -275,7 +275,7 @@ function ManualCreditSection({ userList }: { userList: { id: number; username: s
         </div>
         <div className="flex gap-2 items-center">
           <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Reason / Note (required)" maxLength={200} className="form-input !text-sm flex-1" />
-          <button onClick={doAddCredit} disabled={!targetUserId || !amount || !note.trim()} className="btn btn-primary btn-sm">Apply</button>
+          <button onClick={doAddCredit} disabled={!targetUserId || !amount || !note.trim()} className="btn btn-primary btn-sm">Apply Credit</button>
         </div>
       </div>
     </div>

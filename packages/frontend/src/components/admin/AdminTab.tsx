@@ -450,12 +450,13 @@ function PermissionsPanel() {
   };
 
   const tools = [
-    { key: 'dtmf', label: 'DTMF Capture' }, { key: 'transcript', label: 'Live Transcription' },
-    { key: 'audio_player', label: 'Audio Player' }, { key: 'caller_id', label: 'Caller ID' },
+    { key: 'dtmf', label: 'DTMF Capture' }, { key: 'transcript', label: 'Transcription' },
+    { key: 'audio_player', label: 'Audio Player' }, { key: 'caller_id', label: 'Caller ID Management' },
     { key: 'moh', label: 'Music on Hold' }, { key: 'quick_dial', label: 'Quick Dial' },
-    { key: 'cdr', label: 'Call History (CDR)' }, { key: 'billing', label: 'Billing' },
-    { key: 'allow_tollfree_callerid', label: 'Toll-Free Caller ID' },
-    { key: 'cnam_lookup', label: 'CNAM Lookup' }, { key: 'call_cost', label: 'Call Cost Display' },
+    { key: 'cdr', label: 'Call Detail Records' }, { key: 'billing', label: 'Billing Access' },
+    { key: 'allow_tollfree_callerid', label: 'Allow Toll-Free Caller ID (18XX)' },
+    { key: 'cnam_lookup', label: 'Caller Name / Carrier Lookup' },
+    { key: 'bin_lookup', label: 'BIN Lookup' }, { key: 'call_cost', label: 'Call Cost Display in Monitor' },
   ];
 
   // V1 line 1740-1744: two <select> dropdowns
@@ -727,7 +728,7 @@ function ManualCreditPanel() {
         </div>
         <div className="flex gap-2 items-center">
           <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Reason / Note (required)" maxLength={200} className="form-input !text-sm flex-1" />
-          <button onClick={doAddCredit} disabled={!targetUserId || !amount || !note.trim()} className="btn btn-primary btn-sm">Apply</button>
+          <button onClick={doAddCredit} disabled={!targetUserId || !amount || !note.trim()} className="btn btn-primary btn-sm">Apply Credit</button>
         </div>
       </div>
     </div>

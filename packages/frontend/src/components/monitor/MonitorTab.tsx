@@ -17,7 +17,7 @@ function formatDuration(seconds: number): string {
 
 /** Format phone number for display — matches V1's fmtPhone exactly */
 function fmtPhone(num: string): string {
-  if (!num) return '—';
+  if (!num) return '';
   const d = String(num).replace(/[^0-9]/g, '');
   if (d.length === 11 && d[0] === '1') {
     return `1 (${d.slice(1, 4)}) ${d.slice(4, 7)}-${d.slice(7)}`;
@@ -115,7 +115,7 @@ function ChannelRow({ ch, canDtmf, canTranscript, canAudio, canCost, isAdmin, on
             <span
               className="fraud-badge"
               style={{ background: `${fraudColor}22`, color: fraudColor }}
-              title={`Fraud Score: ${ch.fraudScore}/100`}
+              title={ch.fraudScore! <= 30 ? `Clean number (${ch.fraudScore}/100) — Low fraud risk` : ch.fraudScore! <= 59 ? `Medium risk (${ch.fraudScore}/100) — Moderate fraud indicators` : `High risk (${ch.fraudScore}/100) — Known fraud/spam number`}
             >
               &#9679; {ch.fraudScore}
             </span>
