@@ -176,22 +176,9 @@ function handleMessage(event: MessageEvent) {
     case 'admin_broadcast': {
       // V1 parity: colored toast, sound, desktop notification
       const bcMsg = msg as any;
-      const bcColors: Record<string, string> = { orange: '#d29922', red: '#f85149', green: '#3fb950' };
-      const bcBgs: Record<string, string> = { orange: '#1a1700', red: '#1a1117', green: '#0d1a12' };
-      const bcColor = bcColors[bcMsg.color] || bcColors.orange;
-      const bcBg = bcBgs[bcMsg.color] || bcBgs.orange;
 
-      // Colored toast
-      ui.addToast(`[${bcMsg.from}] ${bcMsg.message}`, 'info', 10000);
-      // Apply color to toast element after render
-      setTimeout(() => {
-        const toastEl = document.querySelector('[role="alert"]') as HTMLElement;
-        if (toastEl) {
-          toastEl.style.borderColor = bcColor;
-          toastEl.style.color = bcColor;
-          toastEl.style.background = bcBg;
-        }
-      }, 50);
+      // Colored toast — pass color through toast system
+      ui.addToast(`Admin: ${bcMsg.message}`, 'broadcast', 6000, bcMsg.color || 'orange');
 
       // Sound: two-tone beep (V1: 800Hz then 1000Hz)
       notifBroadcast();

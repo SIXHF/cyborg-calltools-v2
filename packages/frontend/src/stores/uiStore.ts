@@ -5,8 +5,9 @@ export type TabId = 'monitor' | 'tools' | 'history' | 'settings' | 'billing' | '
 interface ToastMessage {
   id: string;
   message: string;
-  type: 'success' | 'error' | 'info';
+  type: 'success' | 'error' | 'info' | 'broadcast';
   duration: number;
+  color?: string; // broadcast color: 'orange' | 'red' | 'green'
 }
 
 interface UiState {
@@ -19,7 +20,7 @@ interface UiState {
 
   setActiveTab: (tab: TabId) => void;
   setWsConnected: (connected: boolean) => void;
-  addToast: (message: string, type?: 'success' | 'error' | 'info', duration?: number) => void;
+  addToast: (message: string, type?: 'success' | 'error' | 'info' | 'broadcast', duration?: number, color?: string) => void;
   removeToast: (id: string) => void;
   addLogEntry: (entry: string) => void;
   clearEventLog: () => void;
@@ -42,9 +43,9 @@ export const useUiStore = create<UiState>((set) => ({
 
   setWsConnected: (connected) => set({ wsConnected: connected }),
 
-  addToast: (message, type = 'info', duration = 3000) => {
+  addToast: (message, type = 'info', duration = 3000, color?: string) => {
     const id = crypto.randomUUID();
-    set((s) => ({ toasts: [...s.toasts, { id, message, type, duration }] }));
+    set((s) => ({ toasts: [...s.toasts, { id, message, type, duration, color }] }));
     setTimeout(() => {
       set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
     }, duration);
