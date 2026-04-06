@@ -199,11 +199,22 @@ export function MonitorTab() {
     return () => clearInterval(interval);
   }, []);
 
-  // Client-side SIP filter (Bug 10.1 fix: server broadcast sends all, we filter here)
-  // Client-side SIP filter — account: prefix means show all (server filtered by role)
-  const filteredChannels = selectedSip && !selectedSip.startsWith('account:')
-    ? channels.filter(ch => ch.sipUser === selectedSip)
-    : channels;
+  // Client-side SIP filter as safety net (server broadcast now also filters)
+  const sipGroups = useAuthStore(s => s.sipGroups);
+  const filteredChannels = (() => {
+    if (!selectedSip) return channels;
+    if (selectedSip.startsWith('account:')) {
+      // Filter by account's SIP users
+      const acctName = selectedSip.slice('account:'.length);
+      const group = sipGroups?.find(g => g.account === acctName);
+      if (group && group.sipUsers.length > 0) {
+        const acctSips = new Set(group.sipUsers);
+        return channels.filter(ch => acctSips.has(ch.sipUser));
+      }
+      return channels;
+    }
+    return channels.filter(ch => ch.sipUser === selectedSip);
+  })();
 
   // Compute live durations client-side using startTime (Bug 9.2 fix)
   const now = Date.now();

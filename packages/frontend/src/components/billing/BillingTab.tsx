@@ -72,10 +72,10 @@ export function BillingTab() {
         const win = window.open(url, '_blank');
         setRechargeStatus(win ? 'Invoice created! Payment page opened. Watching for payment...' : 'Invoice created! Click the link below to pay.');
       }
-      // Start polling balance every 15s for up to 1 hour
+      // Start polling balance every 15s for up to 1 hour (include selected SIP context)
       if (pollRef.current) clearInterval(pollRef.current);
       const preBalance = balance;
-      pollRef.current = setInterval(() => wsSend({ cmd: 'get_balance' }), 15000);
+      pollRef.current = setInterval(() => wsSend({ cmd: 'get_balance', ...targetSipParam }), 15000);
       // Stop after 1 hour
       setTimeout(() => { if (pollRef.current) clearInterval(pollRef.current); }, 3600000);
     }

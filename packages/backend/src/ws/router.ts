@@ -250,7 +250,8 @@ export async function routeMessage(
       break;
 
     case 'list_audio':
-      if (!session.permissions.audio_player) {
+      // Allow if user has audio_player OR moh permission (MOH panel uses audio library too)
+      if (!session.permissions.audio_player && !session.permissions.moh) {
         send(ws, { type: 'error', message: 'Audio player is disabled for your account.', code: 'FORBIDDEN' });
         return;
       }
@@ -375,6 +376,7 @@ async function handleGetChannels(ws: ServerWebSocket<any>, session: SessionInfo,
   const allChannels = await getActiveChannels();
   const sipUsers = session.sipUsers ?? (session.sipUser ? [session.sipUser] : []);
   const targetSip = msg.targetSip || undefined;
+  const targetAccount = msg.targetAccount || undefined;
 
   if (targetSip && session.role !== 'admin') {
     if (!sipUsers.includes(targetSip)) {
@@ -383,7 +385,22 @@ async function handleGetChannels(ws: ServerWebSocket<any>, session: SessionInfo,
     }
   }
 
-  const userChannels = await getUserChannels(allChannels, session.role, sipUsers, targetSip);
+  // Resolve account to SIP users if targetAccount is specified
+  let effectiveSipUsers = sipUsers;
+  if (targetAccount && session.role === 'admin') {
+    try {
+      const rows = await dbQuery<{ name: string }>(
+        'SELECT s.name FROM pkg_sip s JOIN pkg_user u ON s.id_user = u.id WHERE u.username = ?',
+        [targetAccount]
+      );
+      if (rows.length > 0) {
+        effectiveSipUsers = rows.map(r => r.name);
+      }
+    } catch {}
+  }
+
+  const forceFilter = !!targetAccount && session.role === 'admin';
+  const userChannels = await getUserChannels(allChannels, session.role, effectiveSipUsers, targetSip, forceFilter);
   if (session.role === 'admin') {
     enrichWithTrunkInfo(userChannels, allChannels);
   }

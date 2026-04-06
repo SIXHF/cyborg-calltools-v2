@@ -126,6 +126,7 @@ export const CnamLookupMessage = z.object({
 export const GetChannelsMessage = z.object({
   cmd: z.literal('get_channels'),
   targetSip: z.string().optional(),
+  targetAccount: z.string().optional(),
 });
 
 export const GetCdrMessage = z.object({

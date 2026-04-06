@@ -94,7 +94,25 @@ async function broadcastChannels(allChannels: RawChannel[]) {
 
       try {
         const sipUsers = session.sipUsers ?? (session.sipUser ? [session.sipUser] : []);
-        const userChannels = await getUserChannels(allChannels, session.role, sipUsers);
+
+        // Respect admin's selected SIP user/account context (set via switch_sip_user)
+        const selectedSip = (session as any).selectedSipUser as string | undefined;
+        const selectedAccountSips = (session as any).selectedAccountSipUsers as string[] | undefined;
+
+        let targetSip: string | undefined;
+        let effectiveSipUsers = sipUsers;
+
+        let forceFilter = false;
+        if (selectedSip) {
+          // Admin selected a specific SIP user
+          targetSip = selectedSip;
+        } else if (selectedAccountSips && selectedAccountSips.length > 0) {
+          // Admin selected an account — filter to that account's SIP users
+          effectiveSipUsers = selectedAccountSips;
+          forceFilter = true;
+        }
+
+        const userChannels = await getUserChannels(allChannels, session.role, effectiveSipUsers, targetSip, forceFilter);
 
         // Admin gets trunk info enrichment
         if (session.role === 'admin') {

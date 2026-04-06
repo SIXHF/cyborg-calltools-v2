@@ -223,8 +223,10 @@ function MohPanel() {
   const audioListMsg = useWsMessage<any>('audio_list');
 
   const isNoSipSelected = (role === 'admin' || role === 'user') && !resolvedSip;
-  // V1 line 4686: disable controls during active call
-  const inCall = channels.length > 0;
+  // V1 line 4686: disable controls during active call — only for THIS SIP user's channels
+  const inCall = resolvedSip
+    ? channels.some(ch => (ch as any).sipUser === resolvedSip)
+    : channels.length > 0;
 
   // Fetch MOH info on mount and when SIP changes
   useEffect(() => {

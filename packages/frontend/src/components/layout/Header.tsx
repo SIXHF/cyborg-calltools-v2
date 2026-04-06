@@ -38,7 +38,8 @@ export function Header() {
     if (value.startsWith('account:')) {
       const accountName = value.slice('account:'.length);
       wsSend({ cmd: 'switch_sip_user', sipUser: '', account: accountName });
-      wsSend({ cmd: 'get_channels' });
+      // After switch_sip_user updates the session's account context, request filtered channels
+      wsSend({ cmd: 'get_channels', targetAccount: accountName });
     } else {
       wsSend({ cmd: 'switch_sip_user', sipUser: value || '' });
       wsSend({ cmd: 'get_channels', targetSip: value || undefined });
