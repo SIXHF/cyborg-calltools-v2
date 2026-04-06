@@ -17,6 +17,7 @@ import {
   formatChannelsForClient,
   type RawChannel,
 } from './ami/channels';
+import { dbQuery } from './db/mysql';
 import { enrichChannels } from './services/enrichment';
 import { checkTranscriptionChannels } from './services/transcription';
 
@@ -120,7 +121,20 @@ async function broadcastChannels(allChannels: RawChannel[]) {
         }
 
         const formatted = formatChannelsForClient(userChannels, allChannels);
-        send(ws, { type: 'channel_update', channels: formatted });
+
+        // V1 line 3101-3136: include fresh callerid for the selected SIP user (live sync)
+        const calleridSip = selectedSip || session.sipUser || sipUsers[0];
+        let freshCallerid: string | undefined;
+        if (calleridSip) {
+          try {
+            const cidRows = await dbQuery<any>('SELECT callerid FROM pkg_sip WHERE name = ? LIMIT 1', [calleridSip]);
+            freshCallerid = cidRows[0]?.callerid || '';
+          } catch {}
+        }
+
+        const channelMsg: any = { type: 'channel_update', channels: formatted };
+        if (freshCallerid !== undefined) channelMsg.callerid = freshCallerid;
+        send(ws, channelMsg);
 
         // Fire async CNAM + fraud + cost enrichment (non-blocking)
         if (formatted.length > 0) {

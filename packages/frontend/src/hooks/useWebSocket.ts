@@ -67,6 +67,12 @@ function handleMessage(event: MessageEvent) {
 
     case 'channel_update':
       channels.setChannels(msg.channels as any);
+      // V1 line 2669-2676: live sync caller ID from channel broadcast
+      if ((msg as any).callerid !== undefined) {
+        window.dispatchEvent(new CustomEvent('ws-message', {
+          detail: { type: 'callerid_sync', callerid: (msg as any).callerid },
+        }));
+      }
       break;
 
     case 'cnam_update':
