@@ -3,6 +3,7 @@ import { useChannelStore, type ExtendedChannel } from '../../stores/channelStore
 import { useAuthStore } from '../../stores/authStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { TransferModal } from './TransferModal';
+import { AudioPlayModal } from './AudioPlayModal';
 
 /** Format seconds into mm:ss or hh:mm:ss */
 function formatDuration(seconds: number): string {
@@ -16,7 +17,7 @@ function formatDuration(seconds: number): string {
 
 /** Format phone number for display — matches V1's fmtPhone exactly */
 function fmtPhone(num: string): string {
-  if (!num) return '—';
+  if (!num) return '';
   const d = String(num).replace(/[^0-9]/g, '');
   if (d.length === 11 && d[0] === '1') {
     return `1 (${d.slice(1, 4)}) ${d.slice(4, 7)}-${d.slice(7)}`;
@@ -55,7 +56,7 @@ function displayState(state: string, rawState?: string): string {
   }
 }
 
-function ChannelRow({ ch, canDtmf, canTranscript, canAudio, canCost, isAdmin, onTransfer }: {
+function ChannelRow({ ch, canDtmf, canTranscript, canAudio, canCost, isAdmin, onTransfer, onPlay }: {
   ch: ExtendedChannel;
   canDtmf: boolean;
   canTranscript: boolean;
@@ -63,6 +64,7 @@ function ChannelRow({ ch, canDtmf, canTranscript, canAudio, canCost, isAdmin, on
   canCost: boolean;
   isAdmin: boolean;
   onTransfer: (channel: string, sipUser: string) => void;
+  onPlay: (channel: string) => void;
 }) {
   const isUp = ch.state === 'answered';
   const trunk = isAdmin ? ch.trunk : '';
@@ -76,7 +78,7 @@ function ChannelRow({ ch, canDtmf, canTranscript, canAudio, canCost, isAdmin, on
     <div className="channel-row">
       {/* Top row: Agent, State, Duration, Cost, Trunk */}
       <div className="flex items-center gap-2.5 w-full flex-wrap">
-        <span className="text-[15px] font-bold text-ct-accent" style={{ minWidth: 120 }}>{ch.sipUser}</span>
+        <span style={{ background: '#0d2818', color: '#3fb950', padding: '2px 8px', borderRadius: 8, fontSize: 12, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", minWidth: 80, display: 'inline-block' }}>{ch.sipUser}</span>
         <span className={`tag ${stateTagClass(ch.state)}`}>
           {displayState(ch.state, ch.rawState)}
         </span>
@@ -113,7 +115,7 @@ function ChannelRow({ ch, canDtmf, canTranscript, canAudio, canCost, isAdmin, on
             <span
               className="fraud-badge"
               style={{ background: `${fraudColor}22`, color: fraudColor }}
-              title={`Fraud Score: ${ch.fraudScore}/100`}
+              title={ch.fraudScore! <= 30 ? `Clean number (${ch.fraudScore}/100) — Low fraud risk` : ch.fraudScore! <= 59 ? `Medium risk (${ch.fraudScore}/100) — Moderate fraud indicators` : `High risk (${ch.fraudScore}/100) — Known fraud/spam number`}
             >
               &#9679; {ch.fraudScore}
             </span>
@@ -157,7 +159,7 @@ function ChannelRow({ ch, canDtmf, canTranscript, canAudio, canCost, isAdmin, on
           {isUp && canAudio && (
             <button
               className="btn-call-action btn-play"
-              onClick={() => {/* TODO: open audio modal */}}
+              onClick={() => onPlay(ch.id)}
               title="Play Audio"
             >
               &#9654; Play
@@ -183,6 +185,7 @@ export function MonitorTab() {
   const selectedSip = useAuthStore(s => s.selectedSipUser);
   const [_, setTick] = useState(0);
   const [transferTarget, setTransferTarget] = useState<{ channel: string; sipUser: string } | null>(null);
+  const [audioPlayChannel, setAudioPlayChannel] = useState<string | null>(null);
 
   const isAdmin = role === 'admin';
   const canDtmf = isAdmin || permissions.dtmf !== false;
@@ -197,7 +200,8 @@ export function MonitorTab() {
   }, []);
 
   // Client-side SIP filter (Bug 10.1 fix: server broadcast sends all, we filter here)
-  const filteredChannels = selectedSip
+  // Client-side SIP filter — account: prefix means show all (server filtered by role)
+  const filteredChannels = selectedSip && !selectedSip.startsWith('account:')
     ? channels.filter(ch => ch.sipUser === selectedSip)
     : channels;
 
@@ -246,6 +250,7 @@ export function MonitorTab() {
                   canCost={canCost}
                   isAdmin={isAdmin}
                   onTransfer={(ch, sip) => setTransferTarget({ channel: ch, sipUser: sip })}
+                  onPlay={(ch) => setAudioPlayChannel(ch)}
                 />
               ))}
             </>
@@ -270,6 +275,7 @@ export function MonitorTab() {
                   canCost={canCost}
                   isAdmin={isAdmin}
                   onTransfer={(ch, sip) => setTransferTarget({ channel: ch, sipUser: sip })}
+                  onPlay={(ch) => setAudioPlayChannel(ch)}
                 />
               ))}
             </>
@@ -283,6 +289,14 @@ export function MonitorTab() {
           channel={transferTarget.channel}
           sipUser={transferTarget.sipUser}
           onClose={() => setTransferTarget(null)}
+        />
+      )}
+
+      {/* Audio Play Modal */}
+      {audioPlayChannel && (
+        <AudioPlayModal
+          channel={audioPlayChannel}
+          onClose={() => setAudioPlayChannel(null)}
         />
       )}
     </div>

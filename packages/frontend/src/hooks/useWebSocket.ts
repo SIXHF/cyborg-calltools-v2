@@ -4,7 +4,7 @@ import { useChannelStore } from '../stores/channelStore';
 import { useTranscriptStore } from '../stores/transcriptStore';
 import { useUiStore } from '../stores/uiStore';
 import type { ServerMessage } from '@calltools/shared';
-import { notifDtmfBeep, notifCallConnect, notifCallHangup, notifBroadcast } from '../utils/audio';
+import { notifDtmfBeep, notifCallConnect, notifCallHangup, notifBroadcast, getNotifSettings } from '../utils/audio';
 
 const WS_URL = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_WS_URL) || 'wss://sip.osetec.net/beta-ws/';
 const RECONNECT_BASE_MS = 1000;
@@ -30,6 +30,9 @@ function handleMessage(event: MessageEvent) {
   const transcript = useTranscriptStore.getState();
   const ui = useUiStore.getState();
 
+  // Dispatch ALL messages to 'ws-message' CustomEvent so useWsMessage hook works
+  window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
+
   switch (msg.type) {
     case 'auth_ok':
       auth.login({
@@ -43,8 +46,8 @@ function handleMessage(event: MessageEvent) {
       });
       ui.addLogEntry('Authenticated successfully.');
       ui.addToast('Logged in!', 'success', 2000);
-      // Request initial channel list
-      wsSend({ cmd: 'get_channels' });
+      // V1: request notification permission on login
+      try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch {}
       break;
 
     case 'auth_error':
@@ -55,8 +58,6 @@ function handleMessage(event: MessageEvent) {
     case 'resume_ok':
       auth.resume({ username: msg.username, role: msg.role as any });
       ui.addLogEntry('Session resumed.');
-      // Request channels on resume
-      wsSend({ cmd: 'get_channels' });
       break;
 
     case 'resume_failed':
@@ -68,43 +69,35 @@ function handleMessage(event: MessageEvent) {
       channels.setChannels(msg.channels as any);
       break;
 
-    case 'cnam_update': {
-      // Merge CNAM/fraud data into channels (V1 parity)
-      const cnamMap = (msg as any).cnam_map || {};
-      const currentChannels = channels.channels;
-      if (currentChannels.length > 0 && Object.keys(cnamMap).length > 0) {
-        const normalize = (n: string) => {
-          const clean = n.replace(/\D/g, '');
-          return clean.length === 10 ? '1' + clean : clean;
-        };
-        const updated = currentChannels.map(ch => {
-          const callerData = cnamMap[normalize(ch.callerNum)] || {};
-          const calleeData = cnamMap[normalize(ch.calleeNum)] || {};
-          return {
-            ...ch,
-            callerName: callerData.name || ch.callerName,
-            callerCarrier: callerData.carrier || ch.callerCarrier,
-            callerState: callerData.state || ch.callerState,
-            calleeName: calleeData.name || ch.calleeName,
-            calleeCarrier: calleeData.carrier || ch.calleeCarrier,
-            calleeState: calleeData.state || ch.calleeState,
-            fraudScore: callerData.fraud_score !== undefined ? callerData.fraud_score : ch.fraudScore,
-          };
-        });
-        channels.setChannels(updated);
-      }
+    case 'cnam_update':
+      channels.setCnamMap((msg as any).cnam_map ?? {});
+      if ((msg as any).cost_map) channels.setCostMap((msg as any).cost_map);
       break;
-    }
+
+    case 'dtmf_start':
+      ui.addLogEntry(`DTMF capture started for ${msg.channel}`);
+      window.dispatchEvent(new CustomEvent('dtmf_start', { detail: msg }));
+      // V1: play call connect sound (600Hz + 900Hz)
+      { const ns = getNotifSettings(); if (ns.callEvents) notifCallConnect(); }
+      break;
 
     case 'dtmf_digit':
       ui.addLogEntry(`DTMF [${msg.channel}]: ${msg.digit} (${msg.direction})`);
-      notifDtmfBeep();
-      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
+      // V1: play DTMF beep (1200Hz)
+      { const ns = getNotifSettings(); if (ns.dtmfSound) notifDtmfBeep(); }
+      break;
+
+    case 'dtmf_done':
+      ui.addLogEntry(`DTMF capture ended for ${msg.channel}`);
+      // V1: play call hangup sound (500Hz + 350Hz)
+      { const ns = getNotifSettings(); if (ns.callEvents) notifCallHangup(); }
       break;
 
     case 'transcript_start':
       transcript.setActive(true);
+      transcript.setChannel(msg.channel);
       ui.addLogEntry(`Transcript started for ${msg.channel}`);
+      window.dispatchEvent(new CustomEvent('transcript_start', { detail: { channel: msg.channel } }));
       break;
 
     case 'transcript_update':
@@ -123,90 +116,150 @@ function handleMessage(event: MessageEvent) {
     case 'transcript_done':
       transcript.setActive(false);
       ui.addLogEntry(`Transcript ended for ${msg.channel}`);
+      window.dispatchEvent(new CustomEvent('transcript_done', { detail: { channel: msg.channel } }));
       break;
 
-    case 'callerid_updated':
-      ui.addToast(`Caller ID updated: ${(msg as any).callerid || 'cleared'}`, 'success');
-      ui.addLogEntry(`Caller ID for ${(msg as any).sipUser} set to ${(msg as any).callerid || '(cleared)'}`);
-      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
+    case 'sip_usage_data':
+      window.dispatchEvent(new CustomEvent('sip_usage_data', { detail: msg }));
+      break;
+
+    case 'sip_user_switched':
+      auth.updatePermissions((msg as any).permissions);
+      ui.addLogEntry(`Switched to SIP: ${(msg as any).sipUser || 'All'}`);
       break;
 
     case 'call_originated':
-      ui.addToast(`Call originated to ${(msg as any).destination}`, 'success');
+      ui.addToast(`Calling ${(msg as any).destination}`, 'success', 3000);
       ui.addLogEntry(`Call originated: ${(msg as any).sipUser} → ${(msg as any).destination}`);
-      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
       break;
 
-    case 'cnam_result':
-      ui.addLogEntry(`CNAM: ${(msg as any).number} → ${(msg as any).name}${(msg as any).carrier ? ` (${(msg as any).carrier})` : ''}`);
-      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
-      break;
-
-    case 'cdr_result':
-    case 'stats_result':
-    case 'billing_update':
-    case 'refill_history':
-    case 'users_overview':
-    case 'online_users':
-    case 'permissions_data':
-    case 'audit_log':
     case 'transfer_initiated':
-      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
+      ui.addToast('Transfer initiated', 'success', 3000);
+      ui.addLogEntry(`Transfer: ${(msg as any).channel} → ${(msg as any).destination} (${(msg as any).transfer_type || 'blind'})`);
       break;
 
-    // Payment messages
-    case 'payment_created':
-      ui.addLogEntry(`Payment invoice created`);
-      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
+    case 'callerid_updated':
+      ui.addToast('Caller ID updated', 'success', 3000);
+      ui.addLogEntry(`Caller ID set to: ${(msg as any).callerid || '(cleared)'}`);
       break;
-
-    case 'sip_user_switched': {
-      const switched = msg as any;
-      auth.updatePermissions(switched.permissions);
-      // Store callerid and tollfree status
-      if (switched.callerid !== undefined) {
-        window.dispatchEvent(new CustomEvent('ws-message', { detail: { type: 'callerid_info', sipUser: switched.sipUser, callerid: switched.callerid } }));
-      }
-      ui.addLogEntry(`Switched to SIP user: ${switched.sipUser || 'All'}`);
-      break;
-    }
 
     case 'permissions_updated':
       auth.updatePermissions(msg.permissions);
-      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
+      ui.addToast('Permissions saved', 'success', 2000);
+      break;
+
+    case 'global_settings_updated':
+      ui.addToast('Global setting saved', 'success', 2000);
+      ui.addLogEntry(`Global setting: ${(msg as any).key} = ${(msg as any).value}`);
+      break;
+
+    case 'audio_uploaded':
+      ui.addToast(`Audio uploaded: ${(msg as any).name}`, 'success', 3000);
+      ui.addLogEntry(`Audio uploaded: ${(msg as any).name}`);
+      break;
+
+    case 'audio_playing':
+      ui.addLogEntry(`Playing audio: ${(msg as any).file || (msg as any).filename}`);
+      break;
+
+    case 'audio_stopped':
+      ui.addLogEntry('Audio playback stopped');
+      break;
+
+    case 'moh_updated':
+      ui.addToast((msg as any).using_default ? 'Hold music set to default' : 'Hold music updated', 'success', 3000);
+      ui.addLogEntry('Hold music ' + ((msg as any).using_default ? 'reverted to default' : 'updated'));
+      break;
+
+    case 'audio_deleted':
+      ui.addLogEntry(`Audio deleted: ${(msg as any).name}`);
+      break;
+
+    case 'cnam_result':
+      ui.addLogEntry(`CNAM: ${(msg as any).name || '?'} / ${(msg as any).carrier || '?'}`);
+      break;
+
+    case 'access_updated':
+      ui.addToast(`Access ${(msg as any).enabled ? 'enabled' : 'disabled'} for ${(msg as any).username}`, 'success', 3000);
+      ui.addLogEntry(`Access ${(msg as any).enabled ? 'enabled' : 'disabled'} for ${(msg as any).username}`);
+      break;
+
+    case 'audio_approved':
+      ui.addToast('Audio file approved', 'success', 3000);
+      ui.addLogEntry(`Audio approved: ${(msg as any).name}`);
+      break;
+
+    case 'audio_rejected':
+      ui.addLogEntry(`Audio rejected: ${(msg as any).name}`);
+      break;
+
+    case 'force_logout_ok':
+      ui.addToast(`User ${(msg as any).username || ''} disconnected`, 'success', 3000);
+      ui.addLogEntry(`Force logout: ${(msg as any).username || '?'}`);
+      break;
+
+    case 'ip_restrictions_updated':
+      ui.addToast(`IP restrictions updated for ${(msg as any).targetName}`, 'success', 3000);
+      ui.addLogEntry(`IP restrictions updated: ${(msg as any).targetType}/${(msg as any).targetName}`);
+      break;
+
+    case 'rate_limit_cleared':
+      ui.addToast((msg as any).clear_all ? 'All rate limits cleared' : 'Rate limit cleared', 'success', 3000);
+      ui.addLogEntry(`Rate limit cleared: ${(msg as any).rate_key || 'all'}`);
+      break;
+
+    case 'rate_whitelist_updated':
+      ui.addToast('Rate limit whitelist updated', 'success', 3000);
+      break;
+
+    case 'permissions_refreshed':
+      auth.updatePermissions((msg as any).permissions || {});
+      ui.addToast('Permissions refreshed', 'success', 2000);
+      ui.addLogEntry('Permissions refreshed by admin');
+      break;
+
+    case 'broadcast_sent':
+      ui.addToast(`Broadcast sent to ${(msg as any).recipients} user(s)`, 'success', 3000);
+      ui.addLogEntry(`Broadcast sent to ${(msg as any).target} (${(msg as any).recipients} recipients)`);
       break;
 
     case 'admin_broadcast': {
-      const broadcastColor = (msg as any).color as string | undefined;
-      const toastType: 'success' | 'error' | 'info' =
-        broadcastColor === 'green' ? 'success' :
-        broadcastColor === 'red' ? 'error' : 'info';
-      ui.addToast(`[${msg.from}] ${msg.message}`, toastType, 6000);
-      ui.addLogEntry(`Broadcast from ${msg.from}: ${msg.message}`);
-      // Play broadcast alert sound
+      // V1 parity: colored toast, sound, desktop notification
+      const bcMsg = msg as any;
+
+      // Colored toast — pass color through toast system
+      ui.addToast(`Admin: ${bcMsg.message}`, 'broadcast', 6000, bcMsg.color || 'orange');
+
+      // Sound: two-tone beep (V1: 800Hz then 1000Hz)
       notifBroadcast();
-      if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification(`CallTools: ${msg.from}`, { body: msg.message });
-      }
-      // Dispatch so BroadcastPanel can update history
-      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
+
+      // Desktop notification (V1 parity)
+      try {
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('Admin Broadcast', { body: bcMsg.message, tag: 'admin-broadcast-' + Date.now() });
+        }
+      } catch {}
+
+      ui.addLogEntry(`Broadcast from ${bcMsg.from}: ${bcMsg.message}`);
       break;
     }
 
     case 'error':
-      ui.addToast(msg.message, 'error');
-      ui.addLogEntry(`Error: ${msg.message}`);
-      // Dispatch to components so they can react to errors (Bug 13 fix)
-      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
+      // Don't show "Admin access required" errors to non-admin users (normal for user role)
+      if ((msg as any).code === 'FORBIDDEN' || msg.message === 'Admin access required.') {
+        ui.addLogEntry(`Error: ${msg.message}`);
+      } else {
+        ui.addToast(msg.message, 'error');
+        ui.addLogEntry(`Error: ${msg.message}`);
+      }
       break;
 
     case 'pong':
       break;
 
     default:
-      // Dispatch unknown types to components too (future-proofing)
-      ui.addLogEntry(`Message: ${(msg as any).type}`);
-      window.dispatchEvent(new CustomEvent('ws-message', { detail: msg }));
+      // All messages are dispatched via ws-message CustomEvent above
+      break;
   }
 }
 

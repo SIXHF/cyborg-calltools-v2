@@ -5,10 +5,12 @@ interface TranscriptState {
   segments: TranscriptSegment[];
   partials: { caller: string; callee: string };
   isActive: boolean;
+  channel: string | null;
 
   addSegment: (segment: TranscriptSegment) => void;
   updatePartial: (speaker: 'caller' | 'callee', text: string) => void;
   setActive: (active: boolean) => void;
+  setChannel: (channel: string | null) => void;
   clear: () => void;
 }
 
@@ -16,6 +18,7 @@ export const useTranscriptStore = create<TranscriptState>((set) => ({
   segments: [],
   partials: { caller: '', callee: '' },
   isActive: false,
+  channel: null,
 
   addSegment: (segment) =>
     set((s) => ({
@@ -30,5 +33,7 @@ export const useTranscriptStore = create<TranscriptState>((set) => ({
 
   setActive: (active) => set({ isActive: active }),
 
-  clear: () => set({ segments: [], partials: { caller: '', callee: '' }, isActive: false }),
+  setChannel: (channel) => set({ channel }),
+
+  clear: () => set({ segments: [], partials: { caller: '', callee: '' }, isActive: false, channel: null }),
 }));

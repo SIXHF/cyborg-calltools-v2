@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { useChannelStore } from '../../stores/channelStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { useWsMessage } from '../../hooks/useWsMessage';
+import { AudioPlayerPanel } from './AudioPlayerPanel';
 
 /** CNAM Lookup Panel */
 function CnamLookupPanel() {
@@ -163,8 +164,11 @@ function BinLookupPanel() {
 /** Quick Dial Panel with Recent Numbers */
 function QuickDialPanel() {
   const { sipUsers, role } = useAuthStore();
+  const globalSelectedSip = useAuthStore(s => s.selectedSipUser);
   const [destination, setDestination] = useState('');
-  const [selectedSip, setSelectedSip] = useState(sipUsers[0] ?? '');
+  // V1: uses global SIP selector, not local state
+  const selectedSip = globalSelectedSip || (role === 'sip_user' ? sipUsers[0] : '');
+  const isNoSipSelected = (role === 'admin' || role === 'user') && !selectedSip;
   const [recentNumbers, setRecentNumbers] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('ct2_recent_numbers') || '[]'); } catch { return []; }
   });
@@ -185,10 +189,8 @@ function QuickDialPanel() {
         <h2>Quick Dial</h2>
       </div>
       <div className="p-4 space-y-3">
-        {sipUsers.length > 1 && (
-          <select value={selectedSip} onChange={e => setSelectedSip(e.target.value)} className="form-input !text-sm">
-            {sipUsers.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
+        {isNoSipSelected && (
+          <p className="text-ct-yellow text-xs">Select a specific SIP user to use Quick Dial.</p>
         )}
         <div className="flex gap-2">
           <input
@@ -197,15 +199,13 @@ function QuickDialPanel() {
             onChange={e => setDestination(e.target.value)}
             placeholder="+1 (202) 555-0123"
             className="form-input flex-1 font-mono"
+            disabled={isNoSipSelected}
             onKeyDown={e => e.key === 'Enter' && doDial()}
           />
-          <button onClick={doDial} disabled={!destination.trim() || !selectedSip} className="btn btn-success btn-sm">
+          <button onClick={doDial} disabled={isNoSipSelected || !destination.trim()} className="btn btn-success btn-sm">
             Dial
           </button>
         </div>
-        {!selectedSip && (role === 'admin' || role === 'user') && (
-          <p className="text-ct-yellow text-xs">Select a specific SIP user to use Quick Dial.</p>
-        )}
         {recentNumbers.length > 0 && (
           <div className="flex flex-wrap gap-1.5 items-center">
             <span className="text-[11px] text-ct-muted-dark mr-1">Recent:</span>
@@ -228,6 +228,9 @@ function QuickDialPanel() {
 /** DTMF Capture Panel */
 function DtmfPanel() {
   const { channels } = useChannelStore();
+  const { role } = useAuthStore();
+  const globalSelectedSip = useAuthStore(s => s.selectedSipUser);
+  const isNoSipSelected = (role === 'admin' || role === 'user') && !globalSelectedSip;
   const activeCalls = channels.filter(ch => ch.state === 'answered');
 
   return (
@@ -236,7 +239,9 @@ function DtmfPanel() {
         <h2>DTMF Capture</h2>
       </div>
       <div className="p-4">
-        {activeCalls.length === 0 ? (
+        {isNoSipSelected ? (
+          <p className="text-ct-yellow text-sm">Select a specific SIP user to use DTMF capture.</p>
+        ) : activeCalls.length === 0 ? (
           <p className="text-ct-muted text-sm">No active calls to capture DTMF from. Start a call first.</p>
         ) : (
           <div className="space-y-2">
@@ -263,6 +268,9 @@ function DtmfPanel() {
 /** Live Transcription Panel */
 function TranscriptPanel() {
   const { channels } = useChannelStore();
+  const { role } = useAuthStore();
+  const globalSelectedSip = useAuthStore(s => s.selectedSipUser);
+  const isNoSipSelected = (role === 'admin' || role === 'user') && !globalSelectedSip;
   const activeCalls = channels.filter(ch => ch.state === 'answered');
 
   return (
@@ -271,7 +279,9 @@ function TranscriptPanel() {
         <h2>Live Transcription <span className="text-[10px] font-bold text-white bg-[#5865f2] px-1.5 py-0.5 rounded align-middle ml-1.5 tracking-wider">BETA</span></h2>
       </div>
       <div className="p-4">
-        {activeCalls.length === 0 ? (
+        {isNoSipSelected ? (
+          <p className="text-ct-yellow text-sm">Select a specific SIP user to use transcription.</p>
+        ) : activeCalls.length === 0 ? (
           <p className="text-ct-muted text-sm">No active calls to transcribe. Start a call first.</p>
         ) : (
           <div className="space-y-2">
@@ -305,6 +315,7 @@ export function ToolsTab() {
       {(isAdmin || permissions.transcript !== false) && <TranscriptPanel />}
       {(isAdmin || permissions.dtmf !== false) && <DtmfPanel />}
       {(isAdmin || permissions.quick_dial !== false) && <QuickDialPanel />}
+      {(isAdmin || permissions.audio_player !== false) && <AudioPlayerPanel />}
       {(isAdmin || permissions.cnam_lookup !== false) && <CnamLookupPanel />}
       <BinLookupPanel />
     </div>

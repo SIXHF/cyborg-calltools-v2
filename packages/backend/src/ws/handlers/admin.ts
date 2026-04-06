@@ -202,11 +202,32 @@ export async function handleGetPermissions(
   try {
     const raw = await readFile(PERMISSIONS_FILE, 'utf-8');
     const config = JSON.parse(raw);
-    // Include full SIP user list for the permissions dropdown
-    const allSips = await dbQuery<any>('SELECT name FROM pkg_sip ORDER BY name');
-    const allUsers = await dbQuery<any>('SELECT username FROM pkg_user WHERE active = 1 ORDER BY username');
-    config._allSipUsers = allSips.map((s: any) => s.name);
-    config._allUserAccounts = allUsers.map((u: any) => u.username);
+
+    if (session.role === 'admin') {
+      // Admin sees ALL SIP users and accounts
+      const allSips = await dbQuery<any>('SELECT name FROM pkg_sip ORDER BY name');
+      const allUsers = await dbQuery<any>('SELECT username FROM pkg_user WHERE active = 1 ORDER BY username');
+      config._allSipUsers = allSips.map((s: any) => s.name);
+      config._allUserAccounts = allUsers.map((u: any) => u.username);
+    } else if (session.role === 'user') {
+      // User role sees ONLY their own SIP users (V1: managedSipUsers from auth_ok)
+      config._allSipUsers = session.sipUsers ?? [];
+      config._allUserAccounts = []; // Users can't manage other users
+      // Strip sensitive data — only send defaults + their own restrictions
+      const ownRestrictions: Record<string, any> = {};
+      for (const sip of (session.sipUsers ?? [])) {
+        if (config.admin_restrictions?.[sip]) {
+          ownRestrictions[sip] = config.admin_restrictions[sip];
+        }
+      }
+      config.admin_restrictions = ownRestrictions;
+      delete config.allowed_accounts;
+      delete config.ip_restrictions;
+      delete config.rate_limit_whitelist;
+      delete config.audio_approvals;
+    }
+
+    console.log(`[Perms] Sending permissions_data (${session.role}) with ${config._allSipUsers?.length} SIP users`);
     send(ws, { type: 'permissions_data', config });
   } catch {
     send(ws, { type: 'permissions_data', config: {} });
@@ -250,22 +271,25 @@ export async function handleSetPermissions(
 
     if (!config.admin_restrictions) config.admin_restrictions = {};
 
+    // Strip account: prefix if present (frontend sends "account:cyborg" for user accounts)
+    const cleanTarget = target.startsWith('account:') ? target.slice(8) : target;
+
     // Check if target is a user account (cascade to SIP users like V1)
-    const userRows = await dbQuery<any>('SELECT id FROM pkg_user WHERE username = ? LIMIT 1', [target]);
+    const userRows = await dbQuery<any>('SELECT id FROM pkg_user WHERE username = ? LIMIT 1', [cleanTarget]);
     if (userRows.length > 0) {
       // It's a user account — cascade to all their SIP users
       if (!config.user_account_restrictions) config.user_account_restrictions = {};
-      config.user_account_restrictions[target] = permissions;
+      config.user_account_restrictions[cleanTarget] = permissions;
 
       const sipRows = await dbQuery<any>('SELECT name FROM pkg_sip WHERE id_user = ?', [userRows[0].id]);
       for (const sr of sipRows) {
         config.admin_restrictions[sr.name] = { ...permissions };
       }
-      auditLog(session.username, session.role, session.ip, 'set_permissions', target, `cascaded to ${sipRows.length} SIP users`);
+      auditLog(session.username, session.role, session.ip, 'set_permissions', cleanTarget, `cascaded to ${sipRows.length} SIP users`);
     } else {
       // It's a SIP user — set directly
-      config.admin_restrictions[target] = permissions;
-      auditLog(session.username, session.role, session.ip, 'set_permissions', target, JSON.stringify(permissions));
+      config.admin_restrictions[cleanTarget] = permissions;
+      auditLog(session.username, session.role, session.ip, 'set_permissions', cleanTarget, JSON.stringify(permissions));
     }
 
     await writeFile(PERMISSIONS_FILE, JSON.stringify(config, null, 2));
@@ -276,7 +300,7 @@ export async function handleSetPermissions(
     for (const s of sessions) {
       const sipUser = s.sipUser ?? (s.sipUsers?.[0]);
       // Check if this session is affected
-      const affected = s.sipUser === target || s.sipUsers?.includes(target) || s.username === target;
+      const affected = s.sipUser === cleanTarget || s.sipUsers?.includes(cleanTarget) || s.username === cleanTarget;
       if (affected && s.ws) {
         const newPerms = await resolvePermissions(s.role, sipUser, s.userId?.toString());
         s.permissions = newPerms;
@@ -317,8 +341,8 @@ export async function handleForceLogout(
   send: SendFn
 ) {
   const { targetToken } = msg;
-  if (!targetToken) {
-    send(ws, { type: 'error', message: 'Missing target token.', code: 'INVALID_INPUT' });
+  if (!targetToken || targetToken.length < 8) {
+    send(ws, { type: 'error', message: 'Invalid target token.', code: 'INVALID_INPUT' });
     return;
   }
 
@@ -365,10 +389,11 @@ export async function handleBroadcast(
         try { (s.ws as any).send(JSON.stringify(broadcastMsg)); delivered++; } catch {}
       }
     }
-    send(ws, { type: 'admin_broadcast', message: `Broadcast sent to ${delivered} user(s): "${message}"`, from: 'system' } as any);
+    send(ws, { type: 'broadcast_sent', recipients: delivered, message, target: targets.join(', ') } as any);
   } else if (broadcastToAll) {
     broadcastToAll(broadcastMsg);
-    send(ws, { type: 'admin_broadcast', message: `Broadcast sent to all: "${message}"`, from: 'system' } as any);
+    const allCount = getActiveSessions().length;
+    send(ws, { type: 'broadcast_sent', recipients: allCount, message, target: 'all' } as any);
   }
 }
 
@@ -436,9 +461,13 @@ export async function handleGetUsersOverview(
     });
 
     // V1 line 5672-5674: filter out never-refilled users, sort by registered count desc
-    const filtered = result
-      .filter((u: any) => u.lastRefill !== null)
-      .sort((a: any, b: any) => (b.registeredCount || 0) - (a.registeredCount || 0));
+    // includeAll flag: return all users (for Access Control dropdown)
+    const includeAll = msg.includeAll === true;
+    const filtered = includeAll
+      ? result.sort((a: any, b: any) => a.username.localeCompare(b.username))
+      : result
+          .filter((u: any) => u.lastRefill !== null)
+          .sort((a: any, b: any) => (b.registeredCount || 0) - (a.registeredCount || 0));
 
     send(ws, { type: 'users_overview', users: filtered });
   } catch (err) {
@@ -477,6 +506,7 @@ export async function handleSetGlobalSettings(
       const sessions = getActiveSessions();
       for (const s of sessions) {
         const perms = await resolvePermissions(s.role, s.sipUser, s.userId?.toString());
+        s.permissions = perms; // Update backend session too (V1 line 4197)
         if (s.ws) {
           try {
             const wsAny = s.ws as any;
@@ -548,10 +578,14 @@ export async function handleAddCredit(
   }
 
   try {
+    // Get old credit first (V1 includes "Old credit X.XX" in description)
+    const oldRows = await dbQuery<any>('SELECT credit FROM pkg_user WHERE id = ? LIMIT 1', [targetUserId]);
+    const oldCredit = parseFloat(String(oldRows[0]?.credit ?? 0));
+
     await dbQuery('UPDATE pkg_user SET credit = credit + ? WHERE id = ?', [amount, targetUserId]);
     await dbQuery(
       'INSERT INTO pkg_refill (id_user, credit, description, payment, date) VALUES (?, ?, ?, 1, NOW())',
-      [targetUserId, amount, `Manual by ${session.username}: ${note}`]
+      [targetUserId, amount, `Manual: ${note} (by admin ${session.username}), Old credit ${oldCredit.toFixed(2)}`]
     );
 
     auditLog(session.username, session.role, session.ip, 'add_credit', String(targetUserId), `${amount} - ${note}`);
@@ -559,6 +593,14 @@ export async function handleAddCredit(
     const rows = await dbQuery<any>('SELECT credit FROM pkg_user WHERE id = ? LIMIT 1', [targetUserId]);
     const newBalance = rows[0]?.credit ?? 0;
 
+    // Send credit_added confirmation to the admin
+    send(ws, {
+      type: 'credit_added' as any,
+      targetUserId,
+      newBalance: parseFloat(String(newBalance)),
+    } as any);
+
+    // Also send a broadcast notification
     send(ws, {
       type: 'admin_broadcast' as any,
       message: `Credit adjusted: $${amount.toFixed(2)} for user #${targetUserId}. New balance: $${parseFloat(String(newBalance)).toFixed(2)}`,
@@ -567,5 +609,177 @@ export async function handleAddCredit(
   } catch (err) {
     console.error('[Admin] Add credit error:', err);
     send(ws, { type: 'error', message: 'Failed to add credit.', code: 'DB_ERROR' });
+  }
+}
+
+// ── IP Restrictions ──
+
+export async function handleGetIpRestrictions(
+  ws: ServerWebSocket<any>,
+  session: any,
+  msg: any,
+  send: SendFn
+) {
+  try {
+    const raw = await readFile(PERMISSIONS_FILE, 'utf-8');
+    const config = JSON.parse(raw);
+    send(ws, { type: 'ip_restrictions_list' as any, restrictions: config.ip_restrictions || { users: {}, sip_users: {} } } as any);
+  } catch {
+    send(ws, { type: 'ip_restrictions_list' as any, restrictions: { users: {}, sip_users: {} } } as any);
+  }
+}
+
+export async function handleSetIpRestrictions(
+  ws: ServerWebSocket<any>,
+  session: any,
+  msg: any,
+  send: SendFn
+) {
+  const { targetType, targetName, ips } = msg;
+  if (!targetType || !targetName) {
+    send(ws, { type: 'error', message: 'Missing target.', code: 'INVALID_INPUT' });
+    return;
+  }
+
+  try {
+    let config: any = {};
+    try { config = JSON.parse(await readFile(PERMISSIONS_FILE, 'utf-8')); } catch {}
+
+    if (!config.ip_restrictions) config.ip_restrictions = { users: {}, sip_users: {} };
+
+    if (ips && ips.length > 0) {
+      if (!config.ip_restrictions[targetType]) config.ip_restrictions[targetType] = {};
+      config.ip_restrictions[targetType][targetName] = ips;
+    } else {
+      // Empty = remove restrictions
+      if (config.ip_restrictions[targetType]) {
+        delete config.ip_restrictions[targetType][targetName];
+      }
+    }
+
+    // Cascade: if users, copy to SIP users (V1 line 4630)
+    if (targetType === 'users') {
+      const sipRows = await dbQuery<any>(
+        'SELECT s.name FROM pkg_sip s JOIN pkg_user u ON s.id_user = u.id WHERE u.username = ?',
+        [targetName]
+      );
+      if (!config.ip_restrictions.sip_users) config.ip_restrictions.sip_users = {};
+      for (const sr of sipRows) {
+        if (ips && ips.length > 0) {
+          config.ip_restrictions.sip_users[sr.name] = [...ips];
+        } else {
+          delete config.ip_restrictions.sip_users[sr.name];
+        }
+      }
+    }
+
+    await writeFile(PERMISSIONS_FILE, JSON.stringify(config, null, 2));
+    invalidatePermissionCache();
+    auditLog(session.username, session.role, session.ip, 'set_ip_restrictions', targetName, JSON.stringify(ips));
+    send(ws, { type: 'ip_restrictions_updated' as any, targetType, targetName, ips: ips || [] } as any);
+  } catch (err) {
+    send(ws, { type: 'error', message: 'Failed to save IP restrictions.', code: 'FS_ERROR' });
+  }
+}
+
+// ── Rate Limits ──
+
+export async function handleGetRateLimits(
+  ws: ServerWebSocket<any>,
+  session: any,
+  msg: any,
+  send: SendFn
+) {
+  // Import rate limit buckets from middleware
+  const { getRateLimitBuckets } = await import('../middleware');
+  const buckets = getRateLimitBuckets();
+  const now = Date.now();
+  const LOGIN_WINDOW = 60_000;
+
+  const rateLimits: any[] = [];
+  for (const [key, timestamps] of buckets.entries()) {
+    // Only show login rate limits (key format: "ip:username")
+    if (key.startsWith('cmd:') || key.startsWith('call:')) continue;
+    const active = timestamps.filter((t: number) => now - t < LOGIN_WINDOW);
+    if (active.length === 0) continue;
+    const parts = key.split(':');
+    rateLimits.push({
+      rateKey: key,
+      ip: parts[0] || 'unknown',
+      username: parts.slice(1).join(':') || 'unknown',
+      attempts: active.length,
+      lastAttempt: Math.max(...active),
+      expiresAt: Math.max(...active) + LOGIN_WINDOW,
+    });
+  }
+
+  const perms = JSON.parse(await readFile(PERMISSIONS_FILE, 'utf-8').catch(() => '{}'));
+
+  send(ws, {
+    type: 'rate_limits_list' as any,
+    rateLimits,
+    whitelist: perms.rate_limit_whitelist || [],
+    maxAttempts: 5,
+    windowSeconds: 60,
+  } as any);
+}
+
+export async function handleClearRateLimitAdmin(
+  ws: ServerWebSocket<any>,
+  session: any,
+  msg: any,
+  send: SendFn
+) {
+  const { getRateLimitBuckets } = await import('../middleware');
+  const buckets = getRateLimitBuckets();
+  const { rateKey, clearAll } = msg;
+
+  if (clearAll) {
+    buckets.clear();
+  } else if (rateKey) {
+    buckets.delete(rateKey);
+  }
+
+  auditLog(session.username, session.role, session.ip, 'clear_rate_limit', rateKey || 'all');
+  send(ws, { type: 'rate_limit_cleared' as any, rateKey: rateKey || '', clearAll: !!clearAll } as any);
+}
+
+export async function handleSetRateLimitWhitelist(
+  ws: ServerWebSocket<any>,
+  session: any,
+  msg: any,
+  send: SendFn
+) {
+  const { action, ip: ipStr } = msg;
+  if (!action || !ipStr) {
+    send(ws, { type: 'error', message: 'Missing action or IP.', code: 'INVALID_INPUT' });
+    return;
+  }
+
+  try {
+    let config: any = {};
+    try { config = JSON.parse(await readFile(PERMISSIONS_FILE, 'utf-8')); } catch {}
+
+    let whitelist: string[] = config.rate_limit_whitelist || [];
+
+    if (action === 'add') {
+      if (!whitelist.includes(ipStr)) whitelist.push(ipStr);
+      // Also clear rate limits for this IP
+      const { getRateLimitBuckets } = await import('../middleware');
+      const buckets = getRateLimitBuckets();
+      for (const key of buckets.keys()) {
+        if (key.startsWith(ipStr + ':')) buckets.delete(key);
+      }
+    } else if (action === 'remove') {
+      whitelist = whitelist.filter(ip => ip !== ipStr);
+    }
+
+    config.rate_limit_whitelist = whitelist;
+    await writeFile(PERMISSIONS_FILE, JSON.stringify(config, null, 2));
+    invalidatePermissionCache();
+    auditLog(session.username, session.role, session.ip, 'set_rate_whitelist', ipStr, action);
+    send(ws, { type: 'rate_whitelist_updated' as any, whitelist } as any);
+  } catch (err) {
+    send(ws, { type: 'error', message: 'Failed to update whitelist.', code: 'FS_ERROR' });
   }
 }

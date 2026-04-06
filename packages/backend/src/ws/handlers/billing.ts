@@ -19,7 +19,23 @@ export async function handleGetBalance(
   send: SendFn
 ) {
   try {
-    let userId: number | null = session.userId ?? null;
+    let userId: number | null = null;
+
+    // If admin/user has a selected SIP user or account, show that user's balance
+    const targetSip = msg.targetSip || session.selectedSipUser;
+    const targetAccount = msg.targetAccount || session.selectedAccount;
+    if (targetAccount && (session.role === 'admin' || session.role === 'user')) {
+      // Account selected — resolve user ID from username
+      const userRows = await dbQuery<{ id: number }>('SELECT id FROM pkg_user WHERE username = ? LIMIT 1', [targetAccount]);
+      if (userRows.length > 0) userId = userRows[0].id;
+    } else if (targetSip && (session.role === 'admin' || session.role === 'user')) {
+      userId = await resolveUserId(targetSip);
+    }
+
+    // Fall back to session's own userId
+    if (!userId) {
+      userId = session.userId ?? null;
+    }
 
     if (!userId && session.sipUser) {
       userId = await resolveUserId(session.sipUser);
@@ -59,34 +75,73 @@ export async function handleGetRefillHistory(
   const offset = (page - 1) * perPage;
 
   try {
-    let userId: number | null = session.userId ?? null;
-    if (!userId && session.sipUser) {
-      userId = await resolveUserId(session.sipUser);
+    // V1 line 4998-5001: admin can filter by user ID via dropdown
+    const targetSip = msg.targetSip || session.selectedSipUser;
+    const targetAccount = msg.targetAccount || session.selectedAccount;
+    const filterUserId = msg.filterUserId;
+
+    let whereClause = '';
+    let whereParams: any[] = [];
+
+    if (session.role === 'admin' && filterUserId) {
+      // Admin filtering by specific user ID (V1: refillUserFilter dropdown)
+      whereClause = 'id_user = ?';
+      whereParams = [filterUserId];
+    } else if (session.role === 'admin' && targetAccount) {
+      // Admin with account selected — filter by that account's user ID
+      const userRows = await dbQuery<{ id: number }>('SELECT id FROM pkg_user WHERE username = ? LIMIT 1', [targetAccount]);
+      if (userRows.length > 0) {
+        whereClause = 'id_user = ?';
+        whereParams = [userRows[0].id];
+      } else {
+        whereClause = '1=0';
+      }
+    } else if (session.role === 'admin' && targetSip) {
+      // Admin with specific SIP selected
+      const userId = await resolveUserId(targetSip);
+      if (userId) {
+        whereClause = 'id_user = ?';
+        whereParams = [userId];
+      } else {
+        whereClause = '1=0';
+      }
+    } else if (session.role === 'admin' && !targetSip && !targetAccount) {
+      // Admin with "All" selected — show ALL refills (V1: where = "1=1")
+      whereClause = '1=1';
+    } else {
+      // Non-admin: show own refills
+      let userId: number | null = session.userId ?? null;
+      if (!userId && session.sipUser) {
+        userId = await resolveUserId(session.sipUser);
+      }
+      if (!userId) {
+        send(ws, { type: 'error', message: 'Could not resolve user account.', code: 'NOT_FOUND' });
+        return;
+      }
+      whereClause = 'id_user = ?';
+      whereParams = [userId];
     }
 
-    if (!userId) {
-      send(ws, { type: 'error', message: 'Could not resolve user account.', code: 'NOT_FOUND' });
-      return;
-    }
-
+    // V1: admin sees username column in refill history
     const rows = await dbQuery<any>(
-      'SELECT id, date, credit, description, payment FROM pkg_refill WHERE id_user = ? ORDER BY id DESC LIMIT ? OFFSET ?',
-      [userId, perPage, offset]
+      `SELECT r.id, r.date, r.credit, r.description, r.payment, r.id_user, u.username FROM pkg_refill r LEFT JOIN pkg_user u ON r.id_user = u.id WHERE ${whereClause.replace('id_user', 'r.id_user')} ORDER BY r.id DESC LIMIT ? OFFSET ?`,
+      [...whereParams, perPage, offset]
     );
 
     const countRows = await dbQuery<{ cnt: number }>(
-      'SELECT COUNT(*) as cnt FROM pkg_refill WHERE id_user = ?',
-      [userId]
+      `SELECT COUNT(*) as cnt FROM pkg_refill r WHERE ${whereClause.replace('id_user', 'r.id_user')}`,
+      whereParams
     );
 
     send(ws, {
       type: 'refill_history',
-      records: rows.map(r => ({
+      records: rows.map((r: any) => ({
         id: r.id,
         date: r.date,
         credit: parseFloat(String(r.credit)) || 0,
         description: r.description || '',
         payment: r.payment || '',
+        username: r.username || '',
       })),
       total: countRows[0]?.cnt ?? 0,
       page,

@@ -46,7 +46,7 @@ class AmiClient extends EventEmitter {
         }
       };
       this.on('response', handler);
-      this.sendAction('Login', { Username: AMI_USER, Secret: AMI_PASS, ActionID: actionId });
+      this.sendAction('Login', { Username: AMI_USER, Secret: AMI_PASS, Events: 'dtmf,call', ActionID: actionId });
     });
   }
 

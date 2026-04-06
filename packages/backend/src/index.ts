@@ -3,6 +3,8 @@ import { ClientMessage, type ServerMessage } from '@calltools/shared';
 import { authenticate, resumeSession, createSession, destroySession, getSession, disconnectSession } from './auth/session';
 import { checkRateLimit } from './ws/middleware';
 import { routeMessage, setBroadcastFunction } from './ws/router';
+import { cleanupMonitor } from './ws/handlers/dtmf';
+import { cleanupAudioState } from './ws/handlers/audio';
 import { auditLog } from './audit/logger';
 import { initAmiClient } from './ami/client';
 import { initDatabase } from './db/mysql';
@@ -15,6 +17,8 @@ import {
   formatChannelsForClient,
   type RawChannel,
 } from './ami/channels';
+import { enrichChannels } from './services/enrichment';
+import { checkTranscriptionChannels } from './services/transcription';
 
 const VERSION = '2.0.0-beta.1';
 
@@ -78,6 +82,10 @@ setBroadcastFunction(broadcastToAll);
  * Each client gets channels filtered by their role/permissions.
  */
 async function broadcastChannels(allChannels: RawChannel[]) {
+  // Auto-stop transcriptions for channels that no longer exist (hangup detection)
+  const activeChannelNames = new Set(allChannels.map((ch: any) => ch.channel || ch.name || ''));
+  checkTranscriptionChannels(activeChannelNames);
+
   for (const [username, conns] of connectionsByUser) {
     for (const ws of conns) {
       if (!ws.data.token) continue;
@@ -95,6 +103,14 @@ async function broadcastChannels(allChannels: RawChannel[]) {
 
         const formatted = formatChannelsForClient(userChannels, allChannels);
         send(ws, { type: 'channel_update', channels: formatted });
+
+        // Fire async CNAM + fraud + cost enrichment (non-blocking)
+        if (formatted.length > 0) {
+          const canCnam = session.role === 'admin' || session.permissions.cnam_lookup !== false;
+          const canFraud = session.role === 'admin';
+          const canCost = session.role === 'admin' || session.permissions.call_cost === true;
+          enrichChannels(ws, send, formatted, canCnam, canFraud, canCost, allChannels as any).catch(() => {});
+        }
       } catch (err) {
         console.error(`[WS] Failed to broadcast channels to ${username}:`, err);
       }
@@ -129,7 +145,7 @@ const server = Bun.serve({
   },
 
   websocket: {
-    maxPayloadLength: 2 * 1024 * 1024, // 2MB default
+    maxPayloadLength: 16 * 1024 * 1024, // 16MB to accommodate base64 audio uploads (10MB raw ~13.3MB encoded)
     idleTimeout: 120, // seconds
 
     open(ws: ServerWebSocket<WsData>) {
@@ -274,7 +290,9 @@ const server = Bun.serve({
           // Move session to disconnected state for resume (5-min TTL)
           disconnectSession(ws.data.token);
         }
+        cleanupMonitor(ws.data.token); // Clean up DTMF monitor (V1 line 2682)
       }
+      cleanupAudioState(ws); // Clean up audio playback state
       untrackConnection(ws);
     },
   },

@@ -27,6 +27,11 @@ export function checkRateLimit(
   return { allowed: true };
 }
 
+/** Export buckets for admin inspection */
+export function getRateLimitBuckets(): Map<string, number[]> {
+  return buckets;
+}
+
 // Clean up stale entries periodically
 setInterval(() => {
   const now = Date.now();

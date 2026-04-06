@@ -28,6 +28,8 @@ interface ChannelStoreState {
   setChannels: (channels: ExtendedChannel[]) => void;
   selectChannel: (id: string | null) => void;
   mergeChannelData: (updates: Partial<Record<string, Partial<ExtendedChannel>>>) => void;
+  setCnamMap: (cnamMap: Record<string, any>) => void;
+  setCostMap: (costMap: Record<string, any>) => void;
 }
 
 export const useChannelStore = create<ChannelStoreState>((set, get) => ({
@@ -93,6 +95,41 @@ export const useChannelStore = create<ChannelStoreState>((set, get) => ({
       channels: state.channels.map(ch => {
         const update = updates[ch.callerNum] || updates[ch.calleeNum] || updates[ch.id];
         if (update) return { ...ch, ...update };
+        return ch;
+      }),
+    }));
+  },
+
+  setCnamMap: (cnamMap) => {
+    set((state) => ({
+      channels: state.channels.map(ch => {
+        const callerData = cnamMap[ch.callerNum];
+        const calleeData = cnamMap[ch.calleeNum];
+        const updates: Partial<ExtendedChannel> = {};
+        if (callerData) {
+          if (callerData.name) updates.callerName = callerData.name;
+          if (callerData.carrier) updates.callerCarrier = callerData.carrier;
+          if (callerData.state) updates.callerState = callerData.state;
+          if (callerData.fraud_score !== undefined) updates.fraudScore = callerData.fraud_score;
+        }
+        if (calleeData) {
+          if (calleeData.name) updates.calleeName = calleeData.name;
+          if (calleeData.carrier) updates.calleeCarrier = calleeData.carrier;
+          if (calleeData.state) updates.calleeState = calleeData.state;
+        }
+        return Object.keys(updates).length > 0 ? { ...ch, ...updates } : ch;
+      }),
+    }));
+  },
+
+  setCostMap: (costMap) => {
+    set((state) => ({
+      channels: state.channels.map(ch => {
+        // V1: cost_map keyed by agent/SIP user name, not channel ID
+        const cost = costMap[ch.sipUser] || costMap[ch.id];
+        if (cost) {
+          return { ...ch, callCost: cost.cost, callRate: cost.rate, userBalance: cost.balance };
+        }
         return ch;
       }),
     }));

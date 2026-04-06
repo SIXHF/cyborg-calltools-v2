@@ -38,7 +38,24 @@ export async function handleGetSipUsage(
     failedParams.push(`${safeDate} 23:59:59`);
   }
 
-  // Role-based filtering for non-admin users
+  // Resolve target_account to SIP users
+  const targetAccount = (msg.target_account ?? '').trim();
+  const targetSip = (msg.target_sip ?? '').trim();
+  let filterSips: string[] | null = null;
+
+  if (targetAccount) {
+    try {
+      const rows = await dbQuery<{ name: string }>(
+        'SELECT s.name FROM pkg_sip s JOIN pkg_user u ON s.id_user = u.id WHERE u.username = ?',
+        [targetAccount]
+      );
+      filterSips = rows.map(r => r.name);
+    } catch {}
+  } else if (targetSip) {
+    filterSips = [targetSip];
+  }
+
+  // Role-based filtering + target filtering
   if (session.role === 'sip_user') {
     cdrConditions.push('src = ?');
     failedConditions.push('src = ?');
@@ -46,18 +63,29 @@ export async function handleGetSipUsage(
     failedParams.push(session.sipUser);
   } else if (session.role === 'user') {
     const sipUsers = session.sipUsers ?? [];
-    if (sipUsers.length > 0) {
-      const placeholders = sipUsers.map(() => '?').join(',');
+    // Apply target filter within user's scope
+    const effective = filterSips ? filterSips.filter(s => sipUsers.includes(s)) : sipUsers;
+    if (effective.length > 0) {
+      const placeholders = effective.map(() => '?').join(',');
       cdrConditions.push(`src IN (${placeholders})`);
       failedConditions.push(`src IN (${placeholders})`);
-      cdrParams.push(...sipUsers);
-      failedParams.push(...sipUsers);
+      cdrParams.push(...effective);
+      failedParams.push(...effective);
     } else {
       cdrConditions.push('1=0');
       failedConditions.push('1=0');
     }
+  } else if (session.role === 'admin') {
+    // Admin: apply target filter if specified
+    if (filterSips && filterSips.length > 0) {
+      const placeholders = filterSips.map(() => '?').join(',');
+      cdrConditions.push(`src IN (${placeholders})`);
+      failedConditions.push(`src IN (${placeholders})`);
+      cdrParams.push(...filterSips);
+      failedParams.push(...filterSips);
+    }
+    // No filter = admin sees all
   }
-  // Admin sees all
 
   const cdrWhere = cdrConditions.length > 0 ? cdrConditions.join(' AND ') : '1=1';
   const failedWhere = failedConditions.length > 0 ? failedConditions.join(' AND ') : '1=1';
@@ -118,7 +146,55 @@ export async function handleGetSipUsage(
       { answered: 0, failed: 0, total: 0, minutes: 0, cost: 0 }
     );
 
-    send(ws, { type: 'sip_usage_result', stats, totals });
+    // Hourly distribution
+    const hourlyRows = await dbQuery<{ hr: number; cnt: number }>(
+      `SELECT HOUR(starttime) as hr, COUNT(*) as cnt FROM pkg_cdr WHERE ${cdrWhere} GROUP BY HOUR(starttime) ORDER BY hr`,
+      [...cdrParams]
+    );
+    const hourly: number[] = new Array(24).fill(0);
+    for (const row of hourlyRows) {
+      const hr = Number(row.hr);
+      if (hr >= 0 && hr < 24) hourly[hr] = Number(row.cnt || 0);
+    }
+
+    // Top destinations
+    const topDestRows = await dbQuery<{ calledstation: string; cnt: number; dur: number; cost: number }>(
+      `SELECT calledstation, COUNT(*) as cnt, SUM(sessiontime) as dur, SUM(sessionbill) as cost FROM pkg_cdr WHERE ${cdrWhere} GROUP BY calledstation ORDER BY cnt DESC LIMIT 10`,
+      [...cdrParams]
+    );
+    const topDestinations = topDestRows.map(row => ({
+      number: row.calledstation,
+      calls: Number(row.cnt || 0),
+      seconds: Number(row.dur || 0),
+      cost: Math.round(Number(row.cost || 0) * 1000000) / 1000000,
+    }));
+
+    // Map to frontend-expected format
+    const sipUsage = stats.map(s => ({
+      sip_user: s.sipUser,
+      total_calls: s.total,
+      answered: s.answered,
+      failed: s.failed,
+      total_seconds: Math.round(s.minutes * 60),
+      cost: s.cost,
+      success_rate: s.asr,
+    }));
+    const sipTotals = {
+      total_calls: totals.total,
+      answered: totals.answered,
+      failed: totals.failed,
+      total_seconds: Math.round(totals.minutes * 60),
+      total_cost: totals.cost,
+    };
+    send(ws, {
+      type: 'sip_usage_data',
+      sip_usage: sipUsage,
+      totals: sipTotals,
+      hourly,
+      top_destinations: topDestinations,
+      shift_start: dateFrom || new Date().toISOString().slice(0, 10),
+      timestamp: Date.now() / 1000,
+    } as any);
   } catch (err) {
     console.error('[SIP Usage] Query error:', err);
     send(ws, { type: 'error', message: 'Failed to fetch SIP usage.', code: 'DB_ERROR' });
@@ -136,8 +212,21 @@ export async function handleGetCdr(
   const search = (msg.search ?? '').trim();
   const dateFrom = (msg.dateFrom ?? '').trim();
   const dateTo = (msg.dateTo ?? '').trim();
-  const targetSip = msg.targetSip ?? undefined;
+  const targetSip = msg.targetSip || session.selectedSipUser || undefined;
+  const targetAccount = msg.targetAccount || session.selectedAccount || undefined;
   const offset = (page - 1) * perPage;
+
+  // Resolve account to SIP users if needed
+  let accountSipUsers: string[] = [];
+  if (targetAccount) {
+    try {
+      const rows = await dbQuery<{ name: string }>(
+        'SELECT s.name FROM pkg_sip s JOIN pkg_user u ON s.id_user = u.id WHERE u.username = ?',
+        [targetAccount]
+      );
+      accountSipUsers = rows.map(r => r.name);
+    } catch {}
+  }
 
   // Build WHERE clause using parameterized queries
   const conditions: string[] = [];
@@ -163,6 +252,10 @@ export async function handleGetCdr(
     if (targetSip) {
       conditions.push('(src = ? OR calledstation LIKE ?)');
       params.push(targetSip, `%${targetSip}%`);
+    } else if (accountSipUsers.length > 0) {
+      const placeholders = accountSipUsers.map(() => 'src = ?').join(' OR ');
+      conditions.push(`(${placeholders})`);
+      params.push(...accountSipUsers);
     }
     // Admin with no filter sees all
   }

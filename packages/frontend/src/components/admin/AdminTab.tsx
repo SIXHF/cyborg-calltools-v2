@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '../../stores/authStore';
+import { useUiStore } from '../../stores/uiStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { useWsMessage } from '../../hooks/useWsMessage';
+import { IpRestrictionsPanel } from './IpRestrictionsPanel';
+import { RateLimitsPanel } from './RateLimitsPanel';
 
 type AdminPage = 'stats' | 'settings' | 'broadcast';
 
@@ -102,23 +105,31 @@ function StatsDashboard() {
           </div>
         )}
 
-        {/* ASR by Trunk */}
+        {/* ASR by Trunk — V1 line 5449: colored progress bars */}
         {stats.asr_by_trunk?.length > 0 && (
           <div className="px-4 pb-4">
             <h3 className="text-xs font-semibold text-ct-muted uppercase tracking-wider mb-2">ASR by Trunk</h3>
-            <table className="data-table">
-              <thead><tr><th>Trunk</th><th>Total</th><th>Answered</th><th>ASR</th></tr></thead>
-              <tbody>
-                {stats.asr_by_trunk.map((t: any) => (
-                  <tr key={t.trunk_id}>
-                    <td className="font-mono text-ct-accent">{t.trunk_name}</td>
-                    <td className="font-mono">{t.total}</td>
-                    <td className="font-mono text-ct-green">{t.answered}</td>
-                    <td><span className={`tag ${t.asr >= 50 ? 'tag-up' : t.asr >= 25 ? 'tag-ring' : 'tag-down'}`}>{t.asr}%</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="space-y-1.5">
+              {stats.asr_by_trunk.map((t: any) => {
+                const color = t.asr >= 50 ? '#3fb950' : t.asr >= 25 ? '#d29922' : '#f85149';
+                return (
+                  <div key={t.trunk_id} className="flex items-center gap-2" style={{ marginBottom: 6 }}>
+                    <span className="font-mono text-[12px] text-ct-muted" style={{ minWidth: 100 }}>
+                      {t.trunk_name || `Trunk ${t.trunk_id}`}
+                    </span>
+                    <div className="flex-1 h-4 rounded overflow-hidden" style={{ background: '#21262d' }}>
+                      <div
+                        className="h-full rounded"
+                        style={{ width: `${t.asr}%`, background: color }}
+                      />
+                    </div>
+                    <span className="font-mono text-[11px] text-ct-text-secondary text-right" style={{ minWidth: 70 }}>
+                      {t.asr}% ({t.answered}/{t.total})
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -384,30 +395,46 @@ function SessionsPanel() {
 
 function PermissionsPanel() {
   const [config, setConfig] = useState<any>(null);
+  const [targetType, setTargetType] = useState<'sip_user' | 'user'>('sip_user');
   const [selectedTarget, setSelectedTarget] = useState('');
   const [targetPerms, setTargetPerms] = useState<Record<string, boolean>>({});
   const [sipList, setSipList] = useState<string[]>([]);
-  const permMsg = useWsMessage<any>('permissions_data');
+  const [accountList, setAccountList] = useState<string[]>([]);
 
-  useEffect(() => { wsSend({ cmd: 'get_permissions' }); }, []);
+  // Listen for permissions_data directly via event listener (more reliable than useWsMessage)
   useEffect(() => {
-    if (permMsg?.config) {
-      setConfig(permMsg.config);
-      // Use the full SIP user list from backend (not just admin_restrictions keys)
-      const allSips = permMsg.config._allSipUsers || Object.keys(permMsg.config.admin_restrictions || {});
-      const allAccounts = permMsg.config._allUserAccounts || [];
-      setSipList([...allAccounts.map((a: string) => `account:${a}`), ...allSips]);
-      // Refresh current target if set
-      if (selectedTarget && permMsg.config.admin_restrictions?.[selectedTarget]) {
-        setTargetPerms({ ...permMsg.config.defaults, ...permMsg.config.admin_restrictions[selectedTarget] });
+    const handler = (e: Event) => {
+      const msg = (e as CustomEvent).detail;
+      if (msg?.type === 'permissions_data' && msg.config) {
+        setConfig(msg.config);
+        const allSips = msg.config._allSipUsers || Object.keys(msg.config.admin_restrictions || {});
+        const allAccounts = msg.config._allUserAccounts || [];
+        setSipList(allSips);
+        setAccountList(allAccounts);
       }
-    }
-  }, [permMsg, selectedTarget]);
+    };
+    window.addEventListener('ws-message', handler);
+    wsSend({ cmd: 'get_permissions' });
+    return () => window.removeEventListener('ws-message', handler);
+  }, []);
 
-  const loadPerms = (target: string) => {
-    setSelectedTarget(target);
-    if (config?.admin_restrictions?.[target]) {
-      setTargetPerms({ ...config.defaults, ...config.admin_restrictions[target] });
+  // Update target perms when selection changes
+  useEffect(() => {
+    if (!config || !selectedTarget) return;
+    const cleanTarget = selectedTarget.startsWith('account:') ? selectedTarget.slice(8) : selectedTarget;
+    if (config.admin_restrictions?.[cleanTarget]) {
+      setTargetPerms({ ...config.defaults, ...config.admin_restrictions[cleanTarget] });
+    } else {
+      setTargetPerms(config.defaults || {});
+    }
+  }, [selectedTarget, config]);
+
+  // V1: auto-load permissions when dropdown changes
+  const handleTargetChange = (value: string) => {
+    setSelectedTarget(value);
+    const cleanTarget = value.startsWith('account:') ? value.slice(8) : value;
+    if (config?.admin_restrictions?.[cleanTarget]) {
+      setTargetPerms({ ...config.defaults, ...config.admin_restrictions[cleanTarget] });
     } else {
       setTargetPerms(config?.defaults || {});
     }
@@ -417,28 +444,49 @@ function PermissionsPanel() {
 
   const save = () => {
     if (!selectedTarget) return;
-    wsSend({ cmd: 'admin_set_permissions', target: selectedTarget, permissions: targetPerms });
+    // For user accounts, prefix with account: for cascade
+    const target = targetType === 'user' ? `account:${selectedTarget}` : selectedTarget;
+    wsSend({ cmd: 'admin_set_permissions', target, permissions: targetPerms });
   };
 
   const tools = [
-    { key: 'dtmf', label: 'DTMF Capture' }, { key: 'transcript', label: 'Live Transcription' },
-    { key: 'audio_player', label: 'Audio Player' }, { key: 'caller_id', label: 'Caller ID' },
+    { key: 'dtmf', label: 'DTMF Capture' }, { key: 'transcript', label: 'Transcription' },
+    { key: 'audio_player', label: 'Audio Player' }, { key: 'caller_id', label: 'Caller ID Management' },
     { key: 'moh', label: 'Music on Hold' }, { key: 'quick_dial', label: 'Quick Dial' },
-    { key: 'cdr', label: 'Call History (CDR)' }, { key: 'billing', label: 'Billing' },
-    { key: 'allow_tollfree_callerid', label: 'Toll-Free Caller ID' },
-    { key: 'cnam_lookup', label: 'CNAM Lookup' }, { key: 'call_cost', label: 'Call Cost Display' },
+    { key: 'cdr', label: 'Call Detail Records' }, { key: 'billing', label: 'Billing Access' },
+    { key: 'allow_tollfree_callerid', label: 'Allow Toll-Free Caller ID (18XX)' },
+    { key: 'cnam_lookup', label: 'Caller Name / Carrier Lookup' },
+    { key: 'bin_lookup', label: 'BIN Lookup' }, { key: 'call_cost', label: 'Call Cost Display in Monitor' },
   ];
+
+  // V1 line 1740-1744: two <select> dropdowns
+  const currentList = targetType === 'sip_user' ? sipList : accountList;
 
   return (
     <div className="glass-panel">
       <div className="panel-header"><h2>Permissions Manager</h2></div>
-      <div className="p-4 border-b border-ct-border-solid">
+      <div className="p-3 border-b border-ct-border-solid">
         <div className="flex gap-2 items-center flex-wrap">
-          <input type="text" list="sip-targets" value={selectedTarget} onChange={e => setSelectedTarget(e.target.value)}
-            placeholder="SIP user or account name..." className="form-input !text-sm flex-1" />
-          <datalist id="sip-targets">{sipList.map(s => <option key={s} value={s} />)}</datalist>
-          <button onClick={() => loadPerms(selectedTarget)} className="btn btn-sm">Load</button>
-          <button onClick={save} className="btn btn-sm btn-primary">Save</button>
+          {/* V1 line 1740: target type selector — user role only sees SIP User */}
+          <select
+            value={targetType}
+            onChange={e => { setTargetType(e.target.value as any); setSelectedTarget(''); }}
+            className="form-input !py-1 !px-2 !text-xs"
+            style={{ width: 'auto', minWidth: 100 }}
+          >
+            <option value="sip_user">SIP User</option>
+            {accountList.length > 0 && <option value="user">User</option>}
+          </select>
+          {/* V1 line 1744: target name dropdown (NOT free text) */}
+          <select
+            value={selectedTarget}
+            onChange={e => handleTargetChange(e.target.value)}
+            className="form-input !py-1 !px-2 !text-[13px] font-mono flex-1"
+          >
+            <option value="">-- Select --</option>
+            {currentList.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <button onClick={save} disabled={!selectedTarget} className="btn btn-sm btn-primary">Save</button>
         </div>
       </div>
       {selectedTarget ? (
@@ -464,10 +512,13 @@ function PermissionsPanel() {
 function AccessControlPanel() {
   const [config, setConfig] = useState<any>(null);
   const [newAccount, setNewAccount] = useState('');
+  const [allUsers, setAllUsers] = useState<any[]>([]);
   const permMsg = useWsMessage<any>('permissions_data');
+  const usersMsg = useWsMessage<any>('users_overview');
 
-  useEffect(() => { wsSend({ cmd: 'get_permissions' }); }, []);
+  useEffect(() => { wsSend({ cmd: 'get_permissions' }); wsSend({ cmd: 'get_users_overview', includeAll: true }); }, []);
   useEffect(() => { if (permMsg?.config) setConfig(permMsg.config); }, [permMsg]);
+  useEffect(() => { if (usersMsg?.users) setAllUsers(usersMsg.users); }, [usersMsg]);
 
   const allowedAccounts: string[] = config?.allowed_accounts || [];
 
@@ -483,6 +534,9 @@ function AccessControlPanel() {
     setConfig({ ...config, allowed_accounts: allowedAccounts.filter(a => a !== name) });
   };
 
+  // Filter users not already in allowed list (show all non-admin users, including never-refilled)
+  const availableUsers = allUsers.filter(u => u.username && !allowedAccounts.includes(u.username));
+
   return (
     <div className="glass-panel">
       <div className="panel-header">
@@ -491,9 +545,13 @@ function AccessControlPanel() {
       </div>
       <div className="p-4 border-b border-ct-border-solid">
         <div className="flex gap-2">
-          <input type="text" value={newAccount} onChange={e => setNewAccount(e.target.value)} placeholder="Account username to enable..."
-            className="form-input !text-sm flex-1" onKeyDown={e => e.key === 'Enter' && addAccount()} />
-          <button onClick={addAccount} className="btn btn-sm btn-success">Add</button>
+          <select value={newAccount} onChange={e => setNewAccount(e.target.value)} className="form-input !text-sm flex-1">
+            <option value="">Select account to enable...</option>
+            {availableUsers.map(u => (
+              <option key={u.id || u.username} value={u.username}>{u.username}</option>
+            ))}
+          </select>
+          <button onClick={addAccount} disabled={!newAccount} className="btn btn-sm btn-success">Add</button>
         </div>
         <div className="text-[11px] text-ct-muted-dark mt-2">Admins always have access. Users are denied by default until added here.</div>
       </div>
@@ -555,6 +613,53 @@ function GlobalSettingsPanel() {
   );
 }
 
+// ── Audio Approval Panel (Admin only) ──
+
+function AudioApprovalPanel() {
+  const [files, setFiles] = useState<any[]>([]);
+  const audioListMsg = useWsMessage<any>('audio_list');
+
+  useEffect(() => { wsSend({ cmd: 'list_audio' }); }, []);
+  useEffect(() => {
+    if (audioListMsg?.files) {
+      setFiles(audioListMsg.files.filter((f: any) => f.status === 'pending'));
+    }
+  }, [audioListMsg]);
+
+  const handleAction = (filename: string, action: 'approve' | 'reject') => {
+    wsSend({ cmd: 'admin_approve_audio', filename, action });
+    setFiles(prev => prev.filter(f => f.name !== filename));
+  };
+
+  return (
+    <div className="glass-panel">
+      <div className="panel-header">
+        <h2>Pending Audio Approvals</h2>
+        <button onClick={() => wsSend({ cmd: 'list_audio' })} className="btn btn-sm">Refresh</button>
+      </div>
+      {files.length === 0 ? (
+        <div className="empty-state">No pending audio files.</div>
+      ) : (
+        <div>
+          {files.map(f => (
+            <div key={f.name} className="flex items-center justify-between px-4 py-2.5 border-b border-ct-border-solid/50 last:border-b-0">
+              <div>
+                <span className="text-ct-accent font-mono text-sm">{f.name}</span>
+                {f.uploadedBy && <span className="text-ct-muted text-xs ml-2">by {f.uploadedBy}</span>}
+                {f.size && <span className="text-ct-muted-dark text-xs ml-2">{(f.size / 1024).toFixed(0)} KB</span>}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => handleAction(f.name, 'approve')} className="btn btn-sm btn-success">Approve</button>
+                <button onClick={() => handleAction(f.name, 'reject')} className="btn btn-sm btn-danger">Reject</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Audit Log Viewer ──
 
 function AuditLogPanel() {
@@ -599,8 +704,8 @@ function ManualCreditPanel() {
   const [users, setUsers] = useState<any[]>([]);
   const usersMsg = useWsMessage<any>('users_overview');
 
-  // Fetch users on mount (Bug 20 fix — don't rely on UsersOverview being mounted)
-  useEffect(() => { wsSend({ cmd: 'get_users_overview' }); }, []);
+  // Fetch ALL users on mount (includeAll shows users who never refilled too)
+  useEffect(() => { wsSend({ cmd: 'get_users_overview', includeAll: true }); }, []);
   useEffect(() => { if (usersMsg?.users) setUsers(usersMsg.users); }, [usersMsg]);
 
   const doAddCredit = () => {
@@ -623,7 +728,7 @@ function ManualCreditPanel() {
         </div>
         <div className="flex gap-2 items-center">
           <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Reason / Note (required)" maxLength={200} className="form-input !text-sm flex-1" />
-          <button onClick={doAddCredit} disabled={!targetUserId || !amount || !note.trim()} className="btn btn-primary btn-sm">Apply</button>
+          <button onClick={doAddCredit} disabled={!targetUserId || !amount || !note.trim()} className="btn btn-primary btn-sm">Apply Credit</button>
         </div>
       </div>
     </div>
@@ -833,36 +938,30 @@ function BroadcastPanel() {
 export function AdminTab() {
   const role = useAuthStore(s => s.role);
   const isAdmin = role === 'admin';
-  // V1: 'user' role sees only Settings. Admin sees Dashboard/Settings/Broadcast.
-  const defaultPage: AdminPage = isAdmin ? 'stats' : 'settings';
-  const [page, setPage] = useState<AdminPage>(defaultPage);
-
-  const subPages: [AdminPage, string][] = isAdmin
-    ? [['stats', 'Dashboard'], ['settings', 'Settings'], ['broadcast', 'Broadcast']]
-    : [['settings', 'Settings']]; // user role only sees Settings
+  // V1: admin sub-page controlled by dropdown in TabNav, stored in uiStore
+  // Non-admin users can only see 'settings' page (V1 line 2457)
+  let page = (useUiStore(s => s.adminSubPage) || (isAdmin ? 'stats' : 'settings')) as AdminPage;
+  if (!isAdmin && page !== 'settings') page = 'settings';
 
   return (
     <div className="space-y-4 animate-fade-in" role="tabpanel" id="panel-admin">
-      {subPages.length > 1 && (
-        <div className="flex gap-1 overflow-x-auto">
-          {subPages.map(([id, label]) => (
-            <button key={id} onClick={() => setPage(id)} className={`tab-btn-v1 ${page === id ? 'active' : ''}`}>{label}</button>
-          ))}
-        </div>
-      )}
+      {/* V1: No inline sub-tabs — sub-page selection is in the tab bar dropdown */}
 
-      {page === 'stats' && <StatsDashboard />}
+      {isAdmin && page === 'stats' && <StatsDashboard />}
       {page === 'settings' && (
         <div className="space-y-5">
-          <GlobalSettingsPanel />
-          <AccessControlPanel />
+          {isAdmin && <GlobalSettingsPanel />}
+          {isAdmin && <AccessControlPanel />}
           <PermissionsPanel />
-          <SessionsPanel />
-          <ManualCreditPanel />
-          <AuditLogPanel />
+          {isAdmin && <SessionsPanel />}
+          {isAdmin && <ManualCreditPanel />}
+          {isAdmin && <IpRestrictionsPanel />}
+          {isAdmin && <RateLimitsPanel />}
+          {isAdmin && <AudioApprovalPanel />}
+          {isAdmin && <AuditLogPanel />}
         </div>
       )}
-      {page === 'broadcast' && <BroadcastPanel />}
+      {isAdmin && page === 'broadcast' && <BroadcastPanel />}
     </div>
   );
 }
