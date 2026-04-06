@@ -18,6 +18,7 @@ import {
   type RawChannel,
 } from './ami/channels';
 import { enrichChannels } from './services/enrichment';
+import { checkTranscriptionChannels } from './services/transcription';
 
 const VERSION = '2.0.0-beta.1';
 
@@ -81,6 +82,10 @@ setBroadcastFunction(broadcastToAll);
  * Each client gets channels filtered by their role/permissions.
  */
 async function broadcastChannels(allChannels: RawChannel[]) {
+  // Auto-stop transcriptions for channels that no longer exist (hangup detection)
+  const activeChannelNames = new Set(allChannels.map((ch: any) => ch.channel || ch.name || ''));
+  checkTranscriptionChannels(activeChannelNames);
+
   for (const [username, conns] of connectionsByUser) {
     for (const ws of conns) {
       if (!ws.data.token) continue;

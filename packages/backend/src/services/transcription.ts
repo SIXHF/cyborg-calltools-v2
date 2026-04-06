@@ -79,6 +79,22 @@ export function getTranscriptState(ws: ServerWebSocket<any>): TranscriptState | 
   return activeTranscripts.get(ws);
 }
 
+/**
+ * Check all active transcriptions and clean up any whose channel is no longer active.
+ * Called from channel broadcast polling (every 3s) to auto-stop on hangup.
+ */
+export function checkTranscriptionChannels(activeChannelNames: Set<string>): void {
+  for (const [ws, state] of activeTranscripts) {
+    if (!activeChannelNames.has(state.channel)) {
+      console.log(`[Transcription] Channel ${state.channel} hung up, auto-stopping`);
+      try {
+        (ws as any).send(JSON.stringify({ type: 'transcript_done', channel: state.channel }));
+      } catch {}
+      cleanupTranscription(ws).catch(() => {});
+    }
+  }
+}
+
 // ── ElevenLabs Scribe Streaming ─────────────────────────────────────
 
 async function elevenlabsScribeStream(

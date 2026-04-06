@@ -125,7 +125,8 @@ export const useChannelStore = create<ChannelStoreState>((set, get) => ({
   setCostMap: (costMap) => {
     set((state) => ({
       channels: state.channels.map(ch => {
-        const cost = costMap[ch.id];
+        // V1: cost_map keyed by agent/SIP user name, not channel ID
+        const cost = costMap[ch.sipUser] || costMap[ch.id];
         if (cost) {
           return { ...ch, callCost: cost.cost, callRate: cost.rate, userBalance: cost.balance };
         }
