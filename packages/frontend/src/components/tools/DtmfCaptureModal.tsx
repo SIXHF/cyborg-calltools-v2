@@ -153,13 +153,15 @@ export function DtmfCaptureModal({ channel, sipUser, onClose }: DtmfCaptureModal
   useEffect(() => {
     const onDigit = (e: Event) => {
       const msg = (e as CustomEvent).detail;
-      if (msg?.type === 'dtmf_digit' && msg.channel === channel) {
+      // Accept ALL dtmf_digit events — backend already filters by monitor
+      // Channel may differ (trunk vs user channel) so don't filter by channel
+      if (msg?.type === 'dtmf_digit') {
         handleDigitRef.current(msg.digit);
       }
     };
     const onDone = (e: Event) => {
       const msg = (e as CustomEvent).detail;
-      if (msg?.type === 'dtmf_done' && msg.channel === channel) {
+      if (msg?.type === 'dtmf_done') {
         saveAndCloseRef.current('hangup');
       }
     };
