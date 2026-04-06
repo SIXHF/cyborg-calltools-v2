@@ -69,7 +69,7 @@ async function dispatchDtmf(evt: AmiEvent) {
   // Only process DTMFEnd with Direction=Received and duration >= 40ms
   if (evt.event !== 'DTMFEnd') return;
   if (evt.direction !== 'Received') return;
-  const duration = parseInt(evt.duration || '0');
+  const duration = parseInt(evt.durationms || evt.duration || '0');
   if (duration < 40) return;
 
   const digit = evt.digit;
