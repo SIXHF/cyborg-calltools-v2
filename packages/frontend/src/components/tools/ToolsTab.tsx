@@ -82,6 +82,8 @@ function CnamLookupPanel() {
 
 /** BIN Lookup Panel — calls /bin-lookup.php directly */
 function BinLookupPanel() {
+  const { role, permissions } = useAuthStore();
+  const binDisabled = role !== 'admin' && permissions.bin_lookup === false;
   const [bin, setBin] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -109,11 +111,12 @@ function BinLookupPanel() {
   };
 
   return (
-    <div className="glass-panel">
+    <div className="glass-panel" style={binDisabled ? { opacity: 0.5 } : {}}>
       <div className="panel-header">
         <h2>BIN Lookup</h2>
       </div>
       <div className="p-4 space-y-3">
+        {binDisabled && <div className="text-xs text-ct-muted">Disabled by admin</div>}
         <div className="flex gap-2">
           <input
             type="text"
@@ -122,9 +125,10 @@ function BinLookupPanel() {
             placeholder="Enter first 6-8 digits of card number"
             maxLength={8}
             className="form-input flex-1 font-mono"
-            onKeyDown={e => e.key === 'Enter' && doLookup()}
+            onKeyDown={e => e.key === 'Enter' && !binDisabled && doLookup()}
+            disabled={binDisabled}
           />
-          <button onClick={doLookup} disabled={loading || bin.replace(/\D/g, '').length < 6} className="btn btn-success btn-sm">
+          <button onClick={doLookup} disabled={binDisabled || loading || bin.replace(/\D/g, '').length < 6} className="btn btn-success btn-sm">
             {loading ? 'Looking up...' : 'Lookup'}
           </button>
         </div>

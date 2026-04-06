@@ -593,11 +593,21 @@ export async function handleAddCredit(
     const rows = await dbQuery<any>('SELECT credit FROM pkg_user WHERE id = ? LIMIT 1', [targetUserId]);
     const newBalance = rows[0]?.credit ?? 0;
 
-    // Send credit_added confirmation to the admin
+    // V1 line 6047-6055: send credit_added with all fields
+    // Resolve username for the target user
+    let targetUsername = `#${targetUserId}`;
+    try {
+      const uRows = await dbQuery<any>('SELECT username FROM pkg_user WHERE id = ? LIMIT 1', [targetUserId]);
+      if (uRows[0]?.username) targetUsername = uRows[0].username;
+    } catch {}
+
     send(ws, {
       type: 'credit_added' as any,
       targetUserId,
+      username: targetUsername,
+      amount,
       newBalance: parseFloat(String(newBalance)),
+      note,
     } as any);
 
     // Also send a broadcast notification

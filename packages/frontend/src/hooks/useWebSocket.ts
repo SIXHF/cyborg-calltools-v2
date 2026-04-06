@@ -252,8 +252,13 @@ function handleMessage(event: MessageEvent) {
           ui.addToast(`${alert.username} payment received: +$${parseFloat(alert.amount).toFixed(2)}`, 'success', 5000);
           ui.addLogEntry(`Billing: ${alert.username} payment +$${parseFloat(alert.amount).toFixed(2)} (balance: $${parseFloat(alert.new_balance).toFixed(2)})`);
         } else if (alert.event === 'invoice_created') {
-          ui.addToast(`${alert.username} created $${parseFloat(alert.amount).toFixed(2)} invoice`, 'info', 3000);
+          ui.addToast(`${alert.username} created $${parseFloat(alert.amount).toFixed(2)} invoice`, 'success', 3000);
           ui.addLogEntry(`Billing: ${alert.username} created $${parseFloat(alert.amount).toFixed(2)} invoice`);
+        }
+        // V1 line 5217-5222: refresh billing data if admin is on billing tab
+        if (alert.event === 'payment_received') {
+          // Dispatch so BillingTab can refresh
+          window.dispatchEvent(new CustomEvent('admin-billing-refresh'));
         }
       }
       break;

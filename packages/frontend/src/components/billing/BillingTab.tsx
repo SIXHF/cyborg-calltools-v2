@@ -114,6 +114,17 @@ export function BillingTab() {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
 
+  // V1 line 5217-5222: refresh billing data when admin_billing_alert fires (payment received by another user)
+  useEffect(() => {
+    const handler = () => {
+      wsSend({ cmd: 'get_balance', ...targetSipParam });
+      wsSend({ cmd: 'get_refill_history', page: 1, perPage: 25, ...targetSipParam });
+      if (role === 'admin') wsSend({ cmd: 'get_users_overview', includeAll: true });
+    };
+    window.addEventListener('admin-billing-refresh', handler);
+    return () => window.removeEventListener('admin-billing-refresh', handler);
+  }, [role, selectedSip]);
+
   const loadPage = (p: number, overrideFilterUserId?: number | undefined) => {
     setPage(p);
     const fuid = overrideFilterUserId !== undefined ? overrideFilterUserId : filterUserId;
@@ -263,13 +274,20 @@ function ManualCreditSection({ userList }: { userList: { id: number; username: s
   const [targetUserId, setTargetUserId] = useState('');
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
+  const [creditStatus, setCreditStatus] = useState('');
   const creditMsg = useWsMessage<any>('credit_added');
 
+  // V1 line 5191-5207: show success feedback, clear inputs, refresh data
   useEffect(() => {
     if (creditMsg) {
+      const sign = creditMsg.amount >= 0 ? '+' : '';
+      setCreditStatus(`${sign}$${parseFloat(creditMsg.amount).toFixed(2)} applied to ${creditMsg.username || '?'}. New balance: $${parseFloat(creditMsg.newBalance).toFixed(2)}`);
+      setAmount('');
+      setNote('');
       wsSend({ cmd: 'get_balance' });
       wsSend({ cmd: 'get_refill_history', page: 1, perPage: 25 });
       wsSend({ cmd: 'get_users_overview', includeAll: true });
+      setTimeout(() => setCreditStatus(''), 8000);
     }
   }, [creditMsg]);
 
@@ -297,6 +315,7 @@ function ManualCreditSection({ userList }: { userList: { id: number; username: s
           <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Reason / Note (required)" maxLength={200} className="form-input !text-sm flex-1" />
           <button onClick={doAddCredit} disabled={!targetUserId || !amount || !note.trim()} className="btn btn-primary btn-sm">Apply Credit</button>
         </div>
+        {creditStatus && <div className="text-[13px]" style={{ color: '#3fb950' }}>{creditStatus}</div>}
       </div>
     </div>
   );
