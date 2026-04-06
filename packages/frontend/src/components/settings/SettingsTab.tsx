@@ -58,16 +58,18 @@ export function SettingsTab() {
   }, [calleridUpdate]);
 
   // Sync with global SIP selector — resolve account prefix to actual SIP
+  // Also re-resolve when sipUsers loads (sip_user role: sipUsers may arrive after mount)
   useEffect(() => {
-    setSelectedSip(resolveEffectiveSip(globalSelectedSip));
-  }, [globalSelectedSip]);
+    const resolved = resolveEffectiveSip(globalSelectedSip);
+    if (resolved) setSelectedSip(resolved);
+  }, [globalSelectedSip, sipUsers]);
 
-  // Fetch current caller ID on mount and when SIP user changes (Bug 3.1 fix)
+  // Fetch current caller ID on mount and when SIP user changes
   useEffect(() => {
     if (selectedSip) {
       wsSend({ cmd: 'get_callerid', sipUser: selectedSip });
     }
-  }, [selectedSip]);
+  }, [selectedSip, sipUsers]);
 
   // Update input when callerid is fetched (callerid_info = read, callerid_updated = write)
   useEffect(() => {
@@ -175,7 +177,7 @@ export function SettingsTab() {
       {(role === 'admin' || permissions.moh !== false) && <MohPanel />}
 
       {/* SIP Account Info — hidden for admin (V1 line 3298) */}
-      <SipAccountInfo />
+      {role !== 'admin' && <SipAccountInfo />}
 
       {/* Notification Preferences — persisted to localStorage */}
       <NotificationSettings />
@@ -198,15 +200,18 @@ function MohPanel() {
   const channels = useChannelStore(s => s.channels);
 
   // Resolve account:prefix to actual SIP user for MOH commands
+  // For sip_user role, use their own SIP user if nothing selected
   const resolvedSip = useMemo(() => {
-    if (!globalSelectedSip) return '';
+    if (!globalSelectedSip) {
+      return role === 'sip_user' ? (sipUsers[0] || '') : '';
+    }
     if (globalSelectedSip.startsWith('account:')) {
       const acct = globalSelectedSip.slice('account:'.length);
       const group = sipGroups?.find(g => g.account === acct);
       return group?.sipUsers?.[0] || sipUsers[0] || '';
     }
     return globalSelectedSip;
-  }, [globalSelectedSip, sipGroups, sipUsers]);
+  }, [globalSelectedSip, sipGroups, sipUsers, role]);
 
   const [mohInfo, setMohInfo] = useState<{ using_default: boolean; moh_class: string; files: MohFile[] } | null>(null);
   const [audioFiles, setAudioFiles] = useState<{ name: string }[]>([]);

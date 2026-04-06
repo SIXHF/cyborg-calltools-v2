@@ -939,13 +939,15 @@ export function AdminTab() {
   const role = useAuthStore(s => s.role);
   const isAdmin = role === 'admin';
   // V1: admin sub-page controlled by dropdown in TabNav, stored in uiStore
-  const page = (useUiStore(s => s.adminSubPage) || (isAdmin ? 'stats' : 'settings')) as AdminPage;
+  // Non-admin users can only see 'settings' page (V1 line 2457)
+  let page = (useUiStore(s => s.adminSubPage) || (isAdmin ? 'stats' : 'settings')) as AdminPage;
+  if (!isAdmin && page !== 'settings') page = 'settings';
 
   return (
     <div className="space-y-4 animate-fade-in" role="tabpanel" id="panel-admin">
       {/* V1: No inline sub-tabs — sub-page selection is in the tab bar dropdown */}
 
-      {page === 'stats' && <StatsDashboard />}
+      {isAdmin && page === 'stats' && <StatsDashboard />}
       {page === 'settings' && (
         <div className="space-y-5">
           {isAdmin && <GlobalSettingsPanel />}
@@ -959,7 +961,7 @@ export function AdminTab() {
           {isAdmin && <AuditLogPanel />}
         </div>
       )}
-      {page === 'broadcast' && <BroadcastPanel />}
+      {isAdmin && page === 'broadcast' && <BroadcastPanel />}
     </div>
   );
 }

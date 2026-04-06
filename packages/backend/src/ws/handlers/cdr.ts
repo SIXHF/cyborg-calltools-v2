@@ -38,7 +38,24 @@ export async function handleGetSipUsage(
     failedParams.push(`${safeDate} 23:59:59`);
   }
 
-  // Role-based filtering for non-admin users
+  // Resolve target_account to SIP users
+  const targetAccount = (msg.target_account ?? '').trim();
+  const targetSip = (msg.target_sip ?? '').trim();
+  let filterSips: string[] | null = null;
+
+  if (targetAccount) {
+    try {
+      const rows = await dbQuery<{ name: string }>(
+        'SELECT s.name FROM pkg_sip s JOIN pkg_user u ON s.id_user = u.id WHERE u.username = ?',
+        [targetAccount]
+      );
+      filterSips = rows.map(r => r.name);
+    } catch {}
+  } else if (targetSip) {
+    filterSips = [targetSip];
+  }
+
+  // Role-based filtering + target filtering
   if (session.role === 'sip_user') {
     cdrConditions.push('src = ?');
     failedConditions.push('src = ?');
@@ -46,18 +63,29 @@ export async function handleGetSipUsage(
     failedParams.push(session.sipUser);
   } else if (session.role === 'user') {
     const sipUsers = session.sipUsers ?? [];
-    if (sipUsers.length > 0) {
-      const placeholders = sipUsers.map(() => '?').join(',');
+    // Apply target filter within user's scope
+    const effective = filterSips ? filterSips.filter(s => sipUsers.includes(s)) : sipUsers;
+    if (effective.length > 0) {
+      const placeholders = effective.map(() => '?').join(',');
       cdrConditions.push(`src IN (${placeholders})`);
       failedConditions.push(`src IN (${placeholders})`);
-      cdrParams.push(...sipUsers);
-      failedParams.push(...sipUsers);
+      cdrParams.push(...effective);
+      failedParams.push(...effective);
     } else {
       cdrConditions.push('1=0');
       failedConditions.push('1=0');
     }
+  } else if (session.role === 'admin') {
+    // Admin: apply target filter if specified
+    if (filterSips && filterSips.length > 0) {
+      const placeholders = filterSips.map(() => '?').join(',');
+      cdrConditions.push(`src IN (${placeholders})`);
+      failedConditions.push(`src IN (${placeholders})`);
+      cdrParams.push(...filterSips);
+      failedParams.push(...filterSips);
+    }
+    // No filter = admin sees all
   }
-  // Admin sees all
 
   const cdrWhere = cdrConditions.length > 0 ? cdrConditions.join(' AND ') : '1=1';
   const failedWhere = failedConditions.length > 0 ? failedConditions.join(' AND ') : '1=1';
