@@ -244,6 +244,21 @@ function handleMessage(event: MessageEvent) {
       break;
     }
 
+    case 'admin_billing_alert': {
+      // V1 line 5209-5224: admin sees payment/invoice alerts from users
+      const alert = msg as any;
+      if (auth.role === 'admin') {
+        if (alert.event === 'payment_received') {
+          ui.addToast(`${alert.username} payment received: +$${parseFloat(alert.amount).toFixed(2)}`, 'success', 5000);
+          ui.addLogEntry(`Billing: ${alert.username} payment +$${parseFloat(alert.amount).toFixed(2)} (balance: $${parseFloat(alert.new_balance).toFixed(2)})`);
+        } else if (alert.event === 'invoice_created') {
+          ui.addToast(`${alert.username} created $${parseFloat(alert.amount).toFixed(2)} invoice`, 'info', 3000);
+          ui.addLogEntry(`Billing: ${alert.username} created $${parseFloat(alert.amount).toFixed(2)} invoice`);
+        }
+      }
+      break;
+    }
+
     case 'error':
       // Don't show "Admin access required" errors to non-admin users (normal for user role)
       if ((msg as any).code === 'FORBIDDEN' || msg.message === 'Admin access required.') {

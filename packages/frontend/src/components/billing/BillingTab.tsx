@@ -95,6 +95,8 @@ export function BillingTab() {
         setRechargeStatus(`Payment received! +$${diff.toFixed(2)}`);
         // Refresh refill history to show the new entry
         wsSend({ cmd: 'get_refill_history', page: 1, perPage: 25, ...targetSipParam });
+        // V1 line 4989: notify admin sessions about the successful payment
+        wsSend({ cmd: 'notify_payment', amount: diff, new_balance: newBal });
       }
     }
   }, [balanceMsg]);

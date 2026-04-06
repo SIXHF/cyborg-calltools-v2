@@ -340,6 +340,7 @@ export const ClientMessage = z.discriminatedUnion('cmd', [
   AdminSetIpRestrictionsMessage,
   AdminGetRateLimitsMessage,
   AdminSetRateLimitWhitelistMessage,
+  z.object({ cmd: z.literal('notify_payment'), amount: z.number(), new_balance: z.number() }),
 ]);
 
 export type ClientMessageType = z.infer<typeof ClientMessage>;
