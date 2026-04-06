@@ -576,7 +576,7 @@ async function handleGetSipInfo(ws: ServerWebSocket<any>, session: SessionInfo, 
           callerid: row.callerid || 'Not set',
           host: row.host || 'dynamic',
           codecs: row.allow || 'alaw,ulaw',
-          secret: session.role === 'admin' ? (row.secret || '') : '••••••',
+          secret: row.secret || '', // V1: all roles see their own SIP passwords
           registered,
           regIp: regIp || '',
           balance: balance !== undefined ? balance : undefined,

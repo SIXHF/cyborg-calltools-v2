@@ -25,7 +25,8 @@ export function TabNav() {
 
   const showAdmin = role === 'admin' || role === 'user';
   const showBilling = isAdmin || permissions.billing !== false;
-  const showHistory = isAdmin || permissions.cdr !== false;
+  // V1: History tab always visible (CDR permission only hides panels inside, not the tab)
+  const showHistory = true;
 
   const adminSubPage = useUiStore(s => s.adminSubPage);
   const setAdminSubPage = useUiStore(s => s.setAdminSubPage);

@@ -458,7 +458,9 @@ function CaptureHistoryPanel() {
 export function HistoryTab() {
   const role = useAuthStore((s) => s.role);
   const sipUsers = useAuthStore((s) => s.sipUsers);
-  const showUsagePanel = role === 'admin' || role === 'user' || (sipUsers && sipUsers.length > 1);
+  const permissions = useAuthStore((s) => s.permissions);
+  // V1: SIP Usage visible for admin/user but only when CDR permission not disabled
+  const showUsagePanel = (role === 'admin' || role === 'user' || (sipUsers && sipUsers.length > 1)) && permissions.cdr !== false;
 
   return (
     <div className="space-y-5 animate-fade-in" role="tabpanel" id="panel-history">

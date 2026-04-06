@@ -173,22 +173,36 @@ function BinLookupPanel() {
 function QuickDialPanel() {
   const { sipUsers, role } = useAuthStore();
   const globalSelectedSip = useAuthStore(s => s.selectedSipUser);
+  const sipGroups = useAuthStore(s => s.sipGroups);
   const [destination, setDestination] = useState('');
-  // V1: uses global SIP selector, not local state
-  const selectedSip = globalSelectedSip || (role === 'sip_user' ? sipUsers[0] : '');
+  // Resolve account: prefix to actual SIP user (V1 uses state.selected_sip_user which is always resolved)
+  const selectedSip = (() => {
+    if (!globalSelectedSip) return role === 'sip_user' ? (sipUsers[0] || '') : '';
+    if (globalSelectedSip.startsWith('account:')) {
+      const acct = globalSelectedSip.slice('account:'.length);
+      const group = sipGroups?.find(g => g.account === acct);
+      return group?.sipUsers?.[0] || sipUsers[0] || '';
+    }
+    return globalSelectedSip;
+  })();
   const isNoSipSelected = (role === 'admin' || role === 'user') && !selectedSip;
   const [recentNumbers, setRecentNumbers] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('ct2_recent_numbers') || '[]'); } catch { return []; }
   });
 
+  // V1: recent numbers saved on successful originate, refresh from localStorage
+  useEffect(() => {
+    const handler = () => {
+      try { setRecentNumbers(JSON.parse(localStorage.getItem('ct2_recent_numbers') || '[]')); } catch {}
+    };
+    window.addEventListener('recent-numbers-updated', handler);
+    return () => window.removeEventListener('recent-numbers-updated', handler);
+  }, []);
+
   const doDial = () => {
     if (!destination.trim() || !selectedSip) return;
     const num = destination.trim();
     wsSend({ cmd: 'originate_call', sipUser: selectedSip, destination: num });
-    // Save to recent
-    const updated = [num, ...recentNumbers.filter(n => n !== num)].slice(0, 8);
-    setRecentNumbers(updated);
-    localStorage.setItem('ct2_recent_numbers', JSON.stringify(updated));
   };
 
   return (
