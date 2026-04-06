@@ -7,6 +7,8 @@ import { AudioPlayerPanel } from './AudioPlayerPanel';
 
 /** CNAM Lookup Panel */
 function CnamLookupPanel() {
+  const { role, permissions } = useAuthStore();
+  const cnamDisabled = role !== 'admin' && permissions.cnam_lookup === false;
   const [number, setNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -27,11 +29,12 @@ function CnamLookupPanel() {
   };
 
   return (
-    <div className="glass-panel">
+    <div className="glass-panel" style={cnamDisabled ? { opacity: 0.5 } : {}}>
       <div className="panel-header">
         <h2>Caller Name / Carrier Lookup</h2>
       </div>
       <div className="p-4 space-y-3">
+        {cnamDisabled && <div className="text-xs text-ct-muted">Disabled by admin</div>}
         <div className="flex gap-2">
           <input
             type="tel"
@@ -39,9 +42,10 @@ function CnamLookupPanel() {
             onChange={e => setNumber(e.target.value)}
             placeholder="+1 (202) 555-0123"
             className="form-input flex-1 font-mono"
-            onKeyDown={e => e.key === 'Enter' && doLookup()}
+            onKeyDown={e => e.key === 'Enter' && !cnamDisabled && doLookup()}
+            disabled={cnamDisabled}
           />
-          <button onClick={doLookup} disabled={loading || !number.trim()} className="btn btn-success btn-sm">
+          <button onClick={doLookup} disabled={cnamDisabled || loading || !number.trim()} className="btn btn-success btn-sm">
             {loading ? 'Looking up...' : 'Lookup'}
           </button>
         </div>
@@ -82,6 +86,8 @@ function CnamLookupPanel() {
 
 /** BIN Lookup Panel — calls /bin-lookup.php directly */
 function BinLookupPanel() {
+  const { role, permissions } = useAuthStore();
+  const binDisabled = role !== 'admin' && permissions.bin_lookup === false;
   const [bin, setBin] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -109,11 +115,12 @@ function BinLookupPanel() {
   };
 
   return (
-    <div className="glass-panel">
+    <div className="glass-panel" style={binDisabled ? { opacity: 0.5 } : {}}>
       <div className="panel-header">
         <h2>BIN Lookup</h2>
       </div>
       <div className="p-4 space-y-3">
+        {binDisabled && <div className="text-xs text-ct-muted">Disabled by admin</div>}
         <div className="flex gap-2">
           <input
             type="text"
@@ -122,9 +129,10 @@ function BinLookupPanel() {
             placeholder="Enter first 6-8 digits of card number"
             maxLength={8}
             className="form-input flex-1 font-mono"
-            onKeyDown={e => e.key === 'Enter' && doLookup()}
+            onKeyDown={e => e.key === 'Enter' && !binDisabled && doLookup()}
+            disabled={binDisabled}
           />
-          <button onClick={doLookup} disabled={loading || bin.replace(/\D/g, '').length < 6} className="btn btn-success btn-sm">
+          <button onClick={doLookup} disabled={binDisabled || loading || bin.replace(/\D/g, '').length < 6} className="btn btn-success btn-sm">
             {loading ? 'Looking up...' : 'Lookup'}
           </button>
         </div>
@@ -316,7 +324,7 @@ export function ToolsTab() {
       {(isAdmin || permissions.dtmf !== false) && <DtmfPanel />}
       {(isAdmin || permissions.quick_dial !== false) && <QuickDialPanel />}
       {(isAdmin || permissions.audio_player !== false) && <AudioPlayerPanel />}
-      {(isAdmin || permissions.cnam_lookup !== false) && <CnamLookupPanel />}
+      <CnamLookupPanel />
       <BinLookupPanel />
     </div>
   );

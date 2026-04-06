@@ -78,6 +78,18 @@ export function SettingsTab() {
     }
   }, [calleridInfo, selectedSip]);
 
+  // V1 line 2669-2676: live sync caller ID from channel broadcast (picks up changes from mbilling UI)
+  const calleridSync = useWsMessage<any>('callerid_sync');
+  useEffect(() => {
+    if (calleridSync && calleridSync.callerid !== undefined && !saving) {
+      // Only update if user isn't actively editing (V1: cidInput !== document.activeElement)
+      setCallerid(prev => {
+        if (calleridSync.callerid !== prev) return calleridSync.callerid;
+        return prev;
+      });
+    }
+  }, [calleridSync, saving]);
+
   const handleSetCallerid = () => {
     if (!selectedSip) return;
     setSaving(true);
@@ -223,8 +235,10 @@ function MohPanel() {
   const audioListMsg = useWsMessage<any>('audio_list');
 
   const isNoSipSelected = (role === 'admin' || role === 'user') && !resolvedSip;
-  // V1 line 4686: disable controls during active call
-  const inCall = channels.length > 0;
+  // V1 line 4686: disable controls during active call — only for THIS SIP user's channels
+  const inCall = resolvedSip
+    ? channels.some(ch => (ch as any).sipUser === resolvedSip)
+    : channels.length > 0;
 
   // Fetch MOH info on mount and when SIP changes
   useEffect(() => {

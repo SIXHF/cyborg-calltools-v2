@@ -184,12 +184,14 @@ export async function getUserChannels(
   allChannels: RawChannel[],
   role: string,
   sipUsers: string[],
-  targetSip?: string
+  targetSip?: string,
+  forceFilter?: boolean
 ): Promise<RawChannel[]> {
   const trunks = await refreshTrunkPeers();
 
   // Admin with no filter sees everything except trunk channels
-  if (role === 'admin' && !targetSip) {
+  // forceFilter is used when admin has selected an account (sipUsers is the account's SIP list)
+  if (role === 'admin' && !targetSip && !forceFilter) {
     return allChannels.filter(ch => !isTrunkChannel(ch.channel));
   }
 

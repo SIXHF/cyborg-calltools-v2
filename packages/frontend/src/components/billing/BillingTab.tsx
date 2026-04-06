@@ -60,8 +60,9 @@ export function BillingTab() {
     if (refillMsg) { setRefills(refillMsg.records ?? []); setTotalRefills(refillMsg.total ?? 0); }
   }, [refillMsg]);
 
-  // Balance polling after payment (V1 parity)
+  // Balance polling after payment (V1 parity: lines 5068-5101, 5112-5137)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const preBalanceRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (paymentMsg) {
@@ -72,14 +73,33 @@ export function BillingTab() {
         const win = window.open(url, '_blank');
         setRechargeStatus(win ? 'Invoice created! Payment page opened. Watching for payment...' : 'Invoice created! Click the link below to pay.');
       }
-      // Start polling balance every 15s for up to 1 hour
+      // V1 line 5068-5070: store baseline balance for payment detection
+      if (preBalanceRef.current === null) {
+        preBalanceRef.current = balance;
+      }
+      // Start polling balance every 15s for up to 1 hour (include selected SIP context)
       if (pollRef.current) clearInterval(pollRef.current);
-      const preBalance = balance;
-      pollRef.current = setInterval(() => wsSend({ cmd: 'get_balance' }), 15000);
+      pollRef.current = setInterval(() => wsSend({ cmd: 'get_balance', ...targetSipParam }), 15000);
       // Stop after 1 hour
-      setTimeout(() => { if (pollRef.current) clearInterval(pollRef.current); }, 3600000);
+      setTimeout(() => { if (pollRef.current) clearInterval(pollRef.current); preBalanceRef.current = null; }, 3600000);
     }
   }, [paymentMsg]);
+
+  // V1 line 4975-4992: detect payment received when balance increases during polling
+  useEffect(() => {
+    if (balanceMsg && preBalanceRef.current !== null && pollRef.current) {
+      const newBal = balanceMsg.balance;
+      if (typeof newBal === 'number' && newBal > preBalanceRef.current) {
+        const diff = newBal - preBalanceRef.current;
+        preBalanceRef.current = newBal; // update baseline for next payment
+        setRechargeStatus(`Payment received! +$${diff.toFixed(2)}`);
+        // Refresh refill history to show the new entry
+        wsSend({ cmd: 'get_refill_history', page: 1, perPage: 25, ...targetSipParam });
+        // V1 line 4989: notify admin sessions about the successful payment
+        wsSend({ cmd: 'notify_payment', amount: diff, new_balance: newBal });
+      }
+    }
+  }, [balanceMsg]);
 
   // Clear loading on any error
   useEffect(() => {
@@ -93,6 +113,17 @@ export function BillingTab() {
   useEffect(() => {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
+
+  // V1 line 5217-5222: refresh billing data when admin_billing_alert fires (payment received by another user)
+  useEffect(() => {
+    const handler = () => {
+      wsSend({ cmd: 'get_balance', ...targetSipParam });
+      wsSend({ cmd: 'get_refill_history', page: 1, perPage: 25, ...targetSipParam });
+      if (role === 'admin') wsSend({ cmd: 'get_users_overview', includeAll: true });
+    };
+    window.addEventListener('admin-billing-refresh', handler);
+    return () => window.removeEventListener('admin-billing-refresh', handler);
+  }, [role, selectedSip]);
 
   const loadPage = (p: number, overrideFilterUserId?: number | undefined) => {
     setPage(p);
@@ -243,13 +274,20 @@ function ManualCreditSection({ userList }: { userList: { id: number; username: s
   const [targetUserId, setTargetUserId] = useState('');
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
+  const [creditStatus, setCreditStatus] = useState('');
   const creditMsg = useWsMessage<any>('credit_added');
 
+  // V1 line 5191-5207: show success feedback, clear inputs, refresh data
   useEffect(() => {
     if (creditMsg) {
+      const sign = creditMsg.amount >= 0 ? '+' : '';
+      setCreditStatus(`${sign}$${parseFloat(creditMsg.amount).toFixed(2)} applied to ${creditMsg.username || '?'}. New balance: $${parseFloat(creditMsg.newBalance).toFixed(2)}`);
+      setAmount('');
+      setNote('');
       wsSend({ cmd: 'get_balance' });
       wsSend({ cmd: 'get_refill_history', page: 1, perPage: 25 });
       wsSend({ cmd: 'get_users_overview', includeAll: true });
+      setTimeout(() => setCreditStatus(''), 8000);
     }
   }, [creditMsg]);
 
@@ -277,6 +315,7 @@ function ManualCreditSection({ userList }: { userList: { id: number; username: s
           <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Reason / Note (required)" maxLength={200} className="form-input !text-sm flex-1" />
           <button onClick={doAddCredit} disabled={!targetUserId || !amount || !note.trim()} className="btn btn-primary btn-sm">Apply Credit</button>
         </div>
+        {creditStatus && <div className="text-[13px]" style={{ color: '#3fb950' }}>{creditStatus}</div>}
       </div>
     </div>
   );

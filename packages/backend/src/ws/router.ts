@@ -21,7 +21,7 @@ import { handleGetCdr, handleGetSipUsage } from './handlers/cdr';
 import { handleGetBalance, handleGetRefillHistory } from './handlers/billing';
 import { handleCnamLookup } from './handlers/cnam';
 import { handleStartListening as handleDtmfStart, handleStopListening as handleDtmfStop } from './handlers/dtmf';
-import { handleCreatePayment } from './handlers/payment';
+import { handleCreatePayment, setPaymentBroadcast } from './handlers/payment';
 import { handleListAudio, handleUploadAudio, handlePlayAudio, handleStopAudio, handleDeleteAudio, cleanupAudioState } from './handlers/audio';
 import { enrichChannels } from '../services/enrichment';
 import { startTranscription, stopTranscription } from '../services/transcription';
@@ -61,6 +61,7 @@ interface SessionInfo {
 let broadcastFn: ((msg: any) => void) | null = null;
 export function setBroadcastFunction(fn: (msg: any) => void) {
   broadcastFn = fn;
+  setPaymentBroadcast(fn); // Wire broadcast to payment handler for admin billing alerts
 }
 
 /**
@@ -250,7 +251,8 @@ export async function routeMessage(
       break;
 
     case 'list_audio':
-      if (!session.permissions.audio_player) {
+      // Allow if user has audio_player OR moh permission (MOH panel uses audio library too)
+      if (!session.permissions.audio_player && !session.permissions.moh) {
         send(ws, { type: 'error', message: 'Audio player is disabled for your account.', code: 'FORBIDDEN' });
         return;
       }
@@ -360,6 +362,19 @@ export async function routeMessage(
       await handleGetSipInfo(ws, session, send);
       break;
 
+    case 'notify_payment':
+      // V1 line 6100-6123: client detected payment, notify all admin sessions
+      if (broadcastFn) {
+        broadcastFn({
+          type: 'admin_billing_alert',
+          event: 'payment_received',
+          username: session.username || session.sipUser || 'unknown',
+          amount: (msg as any).amount || 0,
+          new_balance: (msg as any).new_balance || 0,
+        });
+      }
+      break;
+
     case 'ping':
       send(ws, { type: 'pong' });
       break;
@@ -375,6 +390,7 @@ async function handleGetChannels(ws: ServerWebSocket<any>, session: SessionInfo,
   const allChannels = await getActiveChannels();
   const sipUsers = session.sipUsers ?? (session.sipUser ? [session.sipUser] : []);
   const targetSip = msg.targetSip || undefined;
+  const targetAccount = msg.targetAccount || undefined;
 
   if (targetSip && session.role !== 'admin') {
     if (!sipUsers.includes(targetSip)) {
@@ -383,7 +399,22 @@ async function handleGetChannels(ws: ServerWebSocket<any>, session: SessionInfo,
     }
   }
 
-  const userChannels = await getUserChannels(allChannels, session.role, sipUsers, targetSip);
+  // Resolve account to SIP users if targetAccount is specified
+  let effectiveSipUsers = sipUsers;
+  if (targetAccount && session.role === 'admin') {
+    try {
+      const rows = await dbQuery<{ name: string }>(
+        'SELECT s.name FROM pkg_sip s JOIN pkg_user u ON s.id_user = u.id WHERE u.username = ?',
+        [targetAccount]
+      );
+      if (rows.length > 0) {
+        effectiveSipUsers = rows.map(r => r.name);
+      }
+    } catch {}
+  }
+
+  const forceFilter = !!targetAccount && session.role === 'admin';
+  const userChannels = await getUserChannels(allChannels, session.role, effectiveSipUsers, targetSip, forceFilter);
   if (session.role === 'admin') {
     enrichWithTrunkInfo(userChannels, allChannels);
   }

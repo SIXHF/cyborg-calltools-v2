@@ -126,6 +126,7 @@ export const CnamLookupMessage = z.object({
 export const GetChannelsMessage = z.object({
   cmd: z.literal('get_channels'),
   targetSip: z.string().optional(),
+  targetAccount: z.string().optional(),
 });
 
 export const GetCdrMessage = z.object({
@@ -339,6 +340,7 @@ export const ClientMessage = z.discriminatedUnion('cmd', [
   AdminSetIpRestrictionsMessage,
   AdminGetRateLimitsMessage,
   AdminSetRateLimitWhitelistMessage,
+  z.object({ cmd: z.literal('notify_payment'), amount: z.number(), new_balance: z.number() }),
 ]);
 
 export type ClientMessageType = z.infer<typeof ClientMessage>;

@@ -33,6 +33,10 @@ function heleketSign(jsonBody: string, apiKey: string): string {
   return createHash('md5').update(encoded + apiKey).digest('hex');
 }
 
+/** Broadcast function — set from router */
+let _broadcastFn: ((msg: any) => void) | null = null;
+export function setPaymentBroadcast(fn: (msg: any) => void) { _broadcastFn = fn; }
+
 export async function handleCreatePayment(
   ws: ServerWebSocket<any>,
   session: any,
@@ -94,6 +98,16 @@ export async function handleCreatePayment(
         order_id: orderId,
         amount: formattedAmount,
       });
+      // V1 line 5941-5953: notify admin sessions about new invoice
+      if (_broadcastFn) {
+        _broadcastFn({
+          type: 'admin_billing_alert',
+          event: 'invoice_created',
+          username: session.username || session.sipUser || 'unknown',
+          amount: parseFloat(formattedAmount),
+          order_id: orderId,
+        });
+      }
     } else {
       const errorMsg = result?.message || 'Unknown error';
       console.error('[Payment] Heleket error:', JSON.stringify(result));

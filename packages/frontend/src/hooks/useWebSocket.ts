@@ -67,6 +67,12 @@ function handleMessage(event: MessageEvent) {
 
     case 'channel_update':
       channels.setChannels(msg.channels as any);
+      // V1 line 2669-2676: live sync caller ID from channel broadcast
+      if ((msg as any).callerid !== undefined) {
+        window.dispatchEvent(new CustomEvent('ws-message', {
+          detail: { type: 'callerid_sync', callerid: (msg as any).callerid },
+        }));
+      }
       break;
 
     case 'cnam_update':
@@ -241,6 +247,26 @@ function handleMessage(event: MessageEvent) {
       } catch {}
 
       ui.addLogEntry(`Broadcast from ${bcMsg.from}: ${bcMsg.message}`);
+      break;
+    }
+
+    case 'admin_billing_alert': {
+      // V1 line 5209-5224: admin sees payment/invoice alerts from users
+      const alert = msg as any;
+      if (auth.role === 'admin') {
+        if (alert.event === 'payment_received') {
+          ui.addToast(`${alert.username} payment received: +$${parseFloat(alert.amount).toFixed(2)}`, 'success', 5000);
+          ui.addLogEntry(`Billing: ${alert.username} payment +$${parseFloat(alert.amount).toFixed(2)} (balance: $${parseFloat(alert.new_balance).toFixed(2)})`);
+        } else if (alert.event === 'invoice_created') {
+          ui.addToast(`${alert.username} created $${parseFloat(alert.amount).toFixed(2)} invoice`, 'success', 3000);
+          ui.addLogEntry(`Billing: ${alert.username} created $${parseFloat(alert.amount).toFixed(2)} invoice`);
+        }
+        // V1 line 5217-5222: refresh billing data if admin is on billing tab
+        if (alert.event === 'payment_received') {
+          // Dispatch so BillingTab can refresh
+          window.dispatchEvent(new CustomEvent('admin-billing-refresh'));
+        }
+      }
       break;
     }
 

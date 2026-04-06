@@ -17,6 +17,7 @@ import {
   formatChannelsForClient,
   type RawChannel,
 } from './ami/channels';
+import { dbQuery } from './db/mysql';
 import { enrichChannels } from './services/enrichment';
 import { checkTranscriptionChannels } from './services/transcription';
 
@@ -94,7 +95,25 @@ async function broadcastChannels(allChannels: RawChannel[]) {
 
       try {
         const sipUsers = session.sipUsers ?? (session.sipUser ? [session.sipUser] : []);
-        const userChannels = await getUserChannels(allChannels, session.role, sipUsers);
+
+        // Respect admin's selected SIP user/account context (set via switch_sip_user)
+        const selectedSip = (session as any).selectedSipUser as string | undefined;
+        const selectedAccountSips = (session as any).selectedAccountSipUsers as string[] | undefined;
+
+        let targetSip: string | undefined;
+        let effectiveSipUsers = sipUsers;
+
+        let forceFilter = false;
+        if (selectedSip) {
+          // Admin selected a specific SIP user
+          targetSip = selectedSip;
+        } else if (selectedAccountSips && selectedAccountSips.length > 0) {
+          // Admin selected an account — filter to that account's SIP users
+          effectiveSipUsers = selectedAccountSips;
+          forceFilter = true;
+        }
+
+        const userChannels = await getUserChannels(allChannels, session.role, effectiveSipUsers, targetSip, forceFilter);
 
         // Admin gets trunk info enrichment
         if (session.role === 'admin') {
@@ -102,7 +121,20 @@ async function broadcastChannels(allChannels: RawChannel[]) {
         }
 
         const formatted = formatChannelsForClient(userChannels, allChannels);
-        send(ws, { type: 'channel_update', channels: formatted });
+
+        // V1 line 3101-3136: include fresh callerid for the selected SIP user (live sync)
+        const calleridSip = selectedSip || session.sipUser || sipUsers[0];
+        let freshCallerid: string | undefined;
+        if (calleridSip) {
+          try {
+            const cidRows = await dbQuery<any>('SELECT callerid FROM pkg_sip WHERE name = ? LIMIT 1', [calleridSip]);
+            freshCallerid = cidRows[0]?.callerid || '';
+          } catch {}
+        }
+
+        const channelMsg: any = { type: 'channel_update', channels: formatted };
+        if (freshCallerid !== undefined) channelMsg.callerid = freshCallerid;
+        send(ws, channelMsg);
 
         // Fire async CNAM + fraud + cost enrichment (non-blocking)
         if (formatted.length > 0) {
