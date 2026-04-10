@@ -137,6 +137,16 @@ function handleMessage(event: MessageEvent) {
     case 'call_originated':
       ui.addToast(`Calling ${(msg as any).destination}`, 'success', 3000);
       ui.addLogEntry(`Call originated: ${(msg as any).sipUser} → ${(msg as any).destination}`);
+      // V1: save recent number only on successful originate, not on send
+      try {
+        const dest = (msg as any).destination;
+        if (dest) {
+          const recent: string[] = JSON.parse(localStorage.getItem('ct2_recent_numbers') || '[]');
+          const updated = [dest, ...recent.filter(n => n !== dest)].slice(0, 8);
+          localStorage.setItem('ct2_recent_numbers', JSON.stringify(updated));
+          window.dispatchEvent(new CustomEvent('recent-numbers-updated'));
+        }
+      } catch {}
       break;
 
     case 'transfer_initiated':
@@ -321,6 +331,11 @@ function connect() {
   ws.onclose = () => {
     ui.setWsConnected(false);
     ui.addLogEntry('Disconnected.');
+    // V1: show disconnect toast when authenticated
+    const authState = useAuthStore.getState();
+    if (authState.token) {
+      ui.addToast('Session disconnected... reconnecting', 'error', 5000);
+    }
     if (pingTimer) clearInterval(pingTimer);
 
     const delay = Math.min(
@@ -335,6 +350,17 @@ function connect() {
   ws.onerror = () => {};
 }
 
+// V1: clean up DTMF/transcript on page close/refresh
+function handleBeforeUnload() {
+  if (wsInstance?.readyState === WebSocket.OPEN) {
+    const transcript = useTranscriptStore.getState();
+    if (transcript.active && transcript.channel) {
+      wsInstance.send(JSON.stringify({ cmd: 'stop_transcript', channel: transcript.channel }));
+    }
+    wsInstance.send(JSON.stringify({ cmd: 'stop_listening' }));
+  }
+}
+
 /** Hook to start the WebSocket connection once */
 export function useWebSocket() {
   const started = useRef(false);
@@ -343,8 +369,10 @@ export function useWebSocket() {
     if (started.current) return;
     started.current = true;
     connect();
+    window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (pingTimer) clearInterval(pingTimer);
       wsInstance?.close();
